@@ -43,6 +43,7 @@ Grant the service account access inside Google Tag Manager before using it.
 
 ```bash
 gtm-agent doctor --json
+gtm-agent --version
 gtm-agent inventory --account-id 123 --container-id 456 --workspace-id 7 --json
 gtm-agent snapshot --account-id 123 --container-id 456 --workspace-id 7 --out snapshots/before.json
 gtm-agent diff snapshots/before.json snapshots/after.json --json

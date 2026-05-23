@@ -28,6 +28,8 @@ type runtime struct {
 	asJSON  bool
 }
 
+const Version = "0.1.0"
+
 func NewRoot(options Options) *cobra.Command {
 	if options.Out == nil {
 		options.Out = os.Stdout
@@ -45,6 +47,7 @@ func NewRoot(options Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "gtm-agent",
 		Short:         "Agent-safe Google Tag Manager control plane based on @owntag/gtm-cli",
+		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}

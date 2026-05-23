@@ -104,6 +104,13 @@ actions:
 	}
 }
 
+func TestCLIVersion(t *testing.T) {
+	out := runCLI(t, runner.NewFake(nil), "--version")
+	if !strings.Contains(out, "gtm-agent version 0.1.0") {
+		t.Fatalf("unexpected version output: %s", out)
+	}
+}
+
 func TestSnapshotRejectsCommitFriendlyOutputPath(t *testing.T) {
 	fake := runner.NewFake(map[string]runner.Result{
 		"gtm accounts list --output json":                                                                {Stdout: `[]` + "\n"},

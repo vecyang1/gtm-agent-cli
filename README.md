@@ -69,28 +69,54 @@ gtm-agent guide
 
 ## Declarative Plan
 
+Phase 1 creates the trigger only:
+
 ```yaml
 accountId: "123"
 containerId: "456"
 workspaceId: "7"
 actions:
-  - kind: enableBuiltInVariables
-    types: ["pageUrl", "clickText"]
   - kind: createTrigger
-    name: "All Pages"
-    type: "pageview"
+    name: "CE - article_product_click"
+    type: "CUSTOM_EVENT"
+    config:
+      customEventFilter:
+        - type: EQUALS
+          parameter:
+            - {type: TEMPLATE, key: arg0, value: "{{_event}}"}
+            - {type: TEMPLATE, key: arg1, value: article_product_click}
+```
+
+`createTrigger.config` and `createTag.config` are JSON objects expressed as YAML. Resource `type` values must be strings. Config cannot redefine declarative `name`, `type`, or tag firing-trigger fields. Tags accept either one quoted decimal `firingTriggerId` or a non-empty list of unique quoted decimal `firingTriggerIds`; both compile to the upstream `--firing-trigger-id` flag. The validator rejects numeric YAML values, blanks, zero, comma-packed singular values, duplicate IDs, and use of trigger IDs on non-tag actions.
+
+GTM assigns a trigger ID only after creation, so do not guess it or pretend a later action in the same plan can reference the earlier result. Use a two-phase, exact-name workflow:
+
+1. Run `inventory` and confirm there is no exact-name trigger already present.
+2. Dry-run and execute a trigger-only plan.
+3. Run `inventory` again and copy the returned numeric `triggerId`.
+4. Confirm there is no exact-name tag already present, then dry-run and execute the tag plan with that ID.
+
+Phase 2 is a separate file created only after inventory returns the assigned ID (`"20"` is an example inventory result):
+
+```yaml
+accountId: "123"
+containerId: "456"
+workspaceId: "7"
+actions:
   - kind: createTag
-    name: "GA4 purchase"
+    name: "GA4 - article_product_click"
     type: "gaawe"
+    firingTriggerIds: ["20"]
     config:
       parameter:
         - type: template
           key: eventName
-          value: purchase
-  - kind: createVersion
-    name: "agent release"
-    notes: "Created by gtm-agent"
+          value: article_product_click
 ```
+
+The control plane deliberately does not perform live duplicate checks during an offline dry-run. Inventory and snapshots remain the explicit source of live-state evidence.
+
+Independent plans can also use `enableBuiltInVariables`, `createVariable`, `createVersion`, and the separately gated `publishVersion` action.
 
 Publish action:
 

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/vecyang1/gtm-agent-cli/internal/cli"
+	planpkg "github.com/vecyang1/gtm-agent-cli/internal/plan"
 	"github.com/vecyang1/gtm-agent-cli/internal/runner"
 )
 
@@ -106,7 +107,7 @@ actions:
 
 func TestCLIVersion(t *testing.T) {
 	out := runCLI(t, runner.NewFake(nil), "--version")
-	if !strings.Contains(out, "gtm-agent version 0.1.0") {
+	if !strings.Contains(out, "gtm-agent version 0.2.0") {
 		t.Fatalf("unexpected version output: %s", out)
 	}
 }
@@ -193,6 +194,53 @@ actions:
 	}
 }
 
+func TestCLIApplyKeepsConfiguredTriggerAndTagDryRunFirst(t *testing.T) {
+	triggerCommand := `gtm triggers create --name CE - article_product_click --type CUSTOM_EVENT --config {"customEventFilter":[{"parameter":[{"key":"arg0","type":"TEMPLATE","value":"{{_event}}"},{"key":"arg1","type":"TEMPLATE","value":"article_product_click"}],"type":"EQUALS"}]} --account-id 123 --container-id 456 --workspace-id 7 --output json`
+	tagCommand := "gtm tags create --name GA4 - article_product_click --type gaawe --firing-trigger-id 20 --account-id 123 --container-id 456 --workspace-id 7 --output json"
+	fake := runner.NewFake(map[string]runner.Result{
+		triggerCommand: {Stdout: `{"triggerId":"20","name":"CE - article_product_click"}` + "\n"},
+		tagCommand:     {Stdout: `{"tagId":"30","name":"GA4 - article_product_click"}` + "\n"},
+	})
+	tmp := t.TempDir()
+	planPath := filepath.Join(tmp, "article-click.yaml")
+	if err := os.WriteFile(planPath, []byte(`accountId: "123"
+containerId: "456"
+workspaceId: "7"
+actions:
+  - kind: createTrigger
+    name: "CE - article_product_click"
+    type: "CUSTOM_EVENT"
+    config:
+      customEventFilter:
+        - type: EQUALS
+          parameter:
+            - {type: TEMPLATE, key: arg0, value: "{{_event}}"}
+            - {type: TEMPLATE, key: arg1, value: article_product_click}
+  - kind: createTag
+    name: "GA4 - article_product_click"
+    type: "gaawe"
+    firingTriggerIds: ["20"]
+`), 0o600); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	dryRun := runCLI(t, fake, "apply", planPath, "--json")
+	if !strings.Contains(dryRun, `"dryRun": true`) || !strings.Contains(dryRun, `--firing-trigger-id 20`) {
+		t.Fatalf("dry-run did not expose the trigger binding: %s", dryRun)
+	}
+	if len(fake.Calls) != 0 {
+		t.Fatalf("dry-run unexpectedly called upstream GTM: %v", fake.Calls)
+	}
+
+	executed := runCLI(t, fake, "apply", planPath, "--execute", "--json")
+	if !strings.Contains(executed, `"dryRun": false`) || !strings.Contains(executed, `"tagId": "30"`) {
+		t.Fatalf("execute output missing upstream result: %s", executed)
+	}
+	if len(fake.Calls) != 2 || fake.Calls[0] != triggerCommand || fake.Calls[1] != tagCommand {
+		t.Fatalf("unexpected execute calls: %v", fake.Calls)
+	}
+}
+
 func TestCLIPlanValidateAndTemplate(t *testing.T) {
 	tmp := t.TempDir()
 	planPath := filepath.Join(tmp, "plan.yaml")
@@ -220,8 +268,15 @@ actions:
 	if err != nil {
 		t.Fatalf("read template: %v", err)
 	}
-	if !strings.Contains(string(templateData), "enableBuiltInVariables") || !strings.Contains(string(templateData), "createTag") {
-		t.Fatalf("template missing expected action examples: %s", string(templateData))
+	parsedTemplate, err := planpkg.Parse(templateData)
+	if err != nil {
+		t.Fatalf("generated template should validate: %v", err)
+	}
+	if len(parsedTemplate.Actions) != 1 || parsedTemplate.Actions[0].Kind != "createTrigger" {
+		t.Fatalf("starter template must contain only the trigger phase, got %#v", parsedTemplate.Actions)
+	}
+	if !strings.Contains(string(templateData), "create a separate tag plan") || !strings.Contains(string(templateData), "firingTriggerIds") {
+		t.Fatalf("template missing second-phase guidance: %s", string(templateData))
 	}
 }
 

@@ -28,7 +28,7 @@ type runtime struct {
 	asJSON  bool
 }
 
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 func NewRoot(options Options) *cobra.Command {
 	if options.Out == nil {
@@ -610,6 +610,12 @@ Recommended loop:
 6. Snapshot after edits and diff snapshots.
 7. Publish only with both gates: --allow-publish --confirm <container-id>
 
+Trigger-to-tag workflow:
+  Create a new trigger in one reviewed plan, then inventory the workspace and
+  copy its exact numeric triggerId into a second tag plan. Check the inventory
+  for an exact-name match before creating either resource. This avoids duplicate
+  resources and avoids guessing an ID that GTM assigns only after creation.
+
 Raw escape hatch:
   gtm-agent raw -- <any upstream gtm command>
 
@@ -620,20 +626,20 @@ const planTemplate = `accountId: "123"
 containerId: "456"
 workspaceId: "7"
 actions:
-  - kind: enableBuiltInVariables
-    types: ["pageUrl", "clickText"]
   - kind: createTrigger
-    name: "All Pages"
-    type: "pageview"
-  - kind: createTag
-    name: "GA4 purchase"
-    type: "gaawe"
+    name: "CE - article_product_click"
+    type: "CUSTOM_EVENT"
     config:
-      parameter:
-        - type: template
-          key: eventName
-          value: purchase
-  - kind: createVersion
-    name: "agent release"
-    notes: "Created by gtm-agent"
+      customEventFilter:
+        - type: EQUALS
+          parameter:
+            - {type: TEMPLATE, key: arg0, value: "{{_event}}"}
+            - {type: TEMPLATE, key: arg1, value: article_product_click}
+
+# After executing this trigger-only plan, run inventory and copy the assigned ID.
+# Then create a separate tag plan whose action contains, for example:
+#   - kind: createTag
+#     name: "GA4 - article_product_click"
+#     type: "gaawe"
+#     firingTriggerIds: ["20"] # Replace with the verified inventory value.
 `

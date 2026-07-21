@@ -4,10 +4,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+export FAKE_GTM_STATE="$TMP/state"
+mkdir -p "$FAKE_GTM_STATE"
 
 cat > "$TMP/gtm" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+STATE="${FAKE_GTM_STATE:?}"
 case "$*" in
   "--version")
     echo "gtm version 1.5.8"
@@ -28,10 +31,18 @@ case "$*" in
     echo '[{"workspaceId":"7","name":"Default Workspace"}]'
     ;;
   "tags list --account-id 123 --container-id 456 --workspace-id 7 --output json")
-    echo '[{"tagId":"1","name":"GA4 purchase","type":"gaawe"}]'
+    if [[ -f "$STATE/tag-created" ]]; then
+      echo '[{"tagId":"1","name":"GA4 purchase","type":"gaawe"},{"tagId":"30","name":"GA4 - article_product_click","type":"gaawe"}]'
+    else
+      echo '[{"tagId":"1","name":"GA4 purchase","type":"gaawe"}]'
+    fi
     ;;
   "triggers list --account-id 123 --container-id 456 --workspace-id 7 --output json")
-    echo '[{"triggerId":"2","name":"All Pages","type":"pageview"}]'
+    if [[ -f "$STATE/trigger-created" ]]; then
+      echo '[{"triggerId":"2","name":"All Pages","type":"pageview"},{"triggerId":"20","name":"CE - article_product_click","type":"CUSTOM_EVENT"}]'
+    else
+      echo '[{"triggerId":"2","name":"All Pages","type":"pageview"}]'
+    fi
     ;;
   "variables list --account-id 123 --container-id 456 --workspace-id 7 --output json")
     echo '[]'
@@ -44,6 +55,15 @@ case "$*" in
     ;;
   "triggers create --name All Pages --type pageview --account-id 123 --container-id 456 --workspace-id 7 --output json")
     echo '{"triggerId":"2","name":"All Pages"}'
+    ;;
+  triggers\ create\ --name\ CE\ -\ article_product_click\ --type\ CUSTOM_EVENT\ --config\ *\ --account-id\ 123\ --container-id\ 456\ --workspace-id\ 7\ --output\ json)
+    touch "$STATE/trigger-created"
+    echo '{"triggerId":"20","name":"CE - article_product_click"}'
+    ;;
+  "tags create --name GA4 - article_product_click --type gaawe --firing-trigger-id 20 --account-id 123 --container-id 456 --workspace-id 7 --output json")
+    [[ -f "$STATE/trigger-created" ]]
+    touch "$STATE/tag-created"
+    echo '{"tagId":"30","name":"GA4 - article_product_click"}'
     ;;
   "versions publish --version-id 42 --account-id 123 --container-id 456 --output json")
     echo '{"containerVersionId":"42","published":true}'
@@ -71,18 +91,44 @@ perl -0pi -e 's/GA4 purchase/GA4 purchase updated/g' "$TMP/after.json"
 "$TMP/gtm-agent" diff "$TMP/before.json" "$TMP/after.json" --json | grep -q 'GA4 purchase updated'
 "$TMP/gtm-agent" plan template --out "$TMP/template.yaml" --json | grep -q "$TMP/template.yaml"
 
-cat > "$TMP/plan.yaml" <<'YAML'
+if "$TMP/gtm-agent" inventory --account-id 123 --container-id 456 --workspace-id 7 --json | grep -q 'CE - article_product_click'; then
+  echo "trigger unexpectedly existed before the trigger plan" >&2
+  exit 1
+fi
+
+cat > "$TMP/trigger-plan.yaml" <<'YAML'
 accountId: "123"
 containerId: "456"
 workspaceId: "7"
 actions:
   - kind: createTrigger
-    name: "All Pages"
-    type: "pageview"
+    name: "CE - article_product_click"
+    type: "CUSTOM_EVENT"
+    config:
+      customEventFilter:
+        - type: EQUALS
+          parameter:
+            - {type: TEMPLATE, key: arg0, value: "{{_event}}"}
+            - {type: TEMPLATE, key: arg1, value: article_product_click}
 YAML
-"$TMP/gtm-agent" plan validate "$TMP/plan.yaml" --json | grep -q '"valid": true'
-"$TMP/gtm-agent" apply "$TMP/plan.yaml" --json | grep -q '"dryRun": true'
-"$TMP/gtm-agent" apply "$TMP/plan.yaml" --execute --json | grep -q '"triggerId": "2"'
+"$TMP/gtm-agent" plan validate "$TMP/trigger-plan.yaml" --json | grep -q '"valid": true'
+"$TMP/gtm-agent" apply "$TMP/trigger-plan.yaml" --json | grep -q '"dryRun": true'
+"$TMP/gtm-agent" apply "$TMP/trigger-plan.yaml" --execute --json | grep -q '"triggerId": "20"'
+"$TMP/gtm-agent" inventory --account-id 123 --container-id 456 --workspace-id 7 --json | grep -q 'CE - article_product_click'
+
+cat > "$TMP/tag-plan.yaml" <<'YAML'
+accountId: "123"
+containerId: "456"
+workspaceId: "7"
+actions:
+  - kind: createTag
+    name: "GA4 - article_product_click"
+    type: "gaawe"
+    firingTriggerIds: ["20"]
+YAML
+"$TMP/gtm-agent" plan validate "$TMP/tag-plan.yaml" --json | grep -q '"valid": true'
+"$TMP/gtm-agent" apply "$TMP/tag-plan.yaml" --json | grep -q -- '--firing-trigger-id 20'
+"$TMP/gtm-agent" apply "$TMP/tag-plan.yaml" --execute --json | grep -q '"tagId": "30"'
 
 cat > "$TMP/publish.yaml" <<'YAML'
 accountId: "123"

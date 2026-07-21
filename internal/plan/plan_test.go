@@ -54,6 +54,201 @@ actions:
 	}
 }
 
+func TestCreateTriggerCompilesConfigAsJSON(t *testing.T) {
+	raw := []byte(`
+accountId: "123"
+containerId: "456"
+workspaceId: "7"
+actions:
+  - kind: createTrigger
+    name: "CE - article_product_click"
+    type: "CUSTOM_EVENT"
+    config:
+      customEventFilter:
+        - type: EQUALS
+          parameter:
+            - type: TEMPLATE
+              key: arg0
+              value: "{{_event}}"
+            - type: TEMPLATE
+              key: arg1
+              value: article_product_click
+`)
+
+	p, err := plan.Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	commands, err := p.Commands(plan.Options{})
+	if err != nil {
+		t.Fatalf("Commands returned error: %v", err)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("expected one command, got %d", len(commands))
+	}
+	config := flagValue(commands[0].Args, "--config")
+	if !strings.Contains(config, `"customEventFilter"`) || !strings.Contains(config, `"article_product_click"`) {
+		t.Fatalf("trigger config was not compiled as JSON: %s", config)
+	}
+}
+
+func TestCreateTagCompilesPluralFiringTriggerIDs(t *testing.T) {
+	raw := []byte(`
+accountId: "123"
+containerId: "456"
+workspaceId: "7"
+actions:
+  - kind: createTag
+    name: "GA4 - article_product_click"
+    type: "gaawe"
+    firingTriggerIds: ["20", "21"]
+`)
+
+	p, err := plan.Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	commands, err := p.Commands(plan.Options{})
+	if err != nil {
+		t.Fatalf("Commands returned error: %v", err)
+	}
+	if got := flagValue(commands[0].Args, "--firing-trigger-id"); got != "20,21" {
+		t.Fatalf("unexpected firing trigger flag: %q", got)
+	}
+}
+
+func TestCreateTagCompilesSingularFiringTriggerID(t *testing.T) {
+	raw := []byte(`
+accountId: "123"
+containerId: "456"
+workspaceId: "7"
+actions:
+  - kind: createTag
+    name: "GA4 - article_product_click"
+    type: "gaawe"
+    firingTriggerId: "20"
+`)
+
+	p, err := plan.Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	commands, err := p.Commands(plan.Options{})
+	if err != nil {
+		t.Fatalf("Commands returned error: %v", err)
+	}
+	if got := flagValue(commands[0].Args, "--firing-trigger-id"); got != "20" {
+		t.Fatalf("unexpected firing trigger flag: %q", got)
+	}
+}
+
+func TestParseRejectsMalformedFiringTriggerIDs(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields string
+	}{
+		{name: "empty singular", fields: `firingTriggerId: ""`},
+		{name: "non numeric singular", fields: `firingTriggerId: "all-pages"`},
+		{name: "comma separated singular", fields: `firingTriggerId: "20,21"`},
+		{name: "zero singular", fields: `firingTriggerId: "0"`},
+		{name: "empty plural", fields: `firingTriggerIds: []`},
+		{name: "blank plural member", fields: `firingTriggerIds: ["20", " "]`},
+		{name: "duplicate plural member", fields: `firingTriggerIds: ["20", "20"]`},
+		{name: "both forms", fields: "firingTriggerId: \"20\"\n    firingTriggerIds: [\"21\"]"},
+		{name: "wrong plural type", fields: `firingTriggerIds: "20"`},
+		{name: "numeric singular type", fields: `firingTriggerId: 20`},
+		{name: "numeric plural member type", fields: `firingTriggerIds: [20]`},
+		{name: "null singular type", fields: `firingTriggerId: null`},
+		{name: "null plural type", fields: `firingTriggerIds: null`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			raw := []byte("accountId: \"123\"\n" +
+				"containerId: \"456\"\n" +
+				"workspaceId: \"7\"\n" +
+				"actions:\n" +
+				"  - kind: createTag\n" +
+				"    name: \"GA4 event\"\n" +
+				"    type: \"gaawe\"\n" +
+				"    " + test.fields + "\n")
+			if _, err := plan.Parse(raw); err == nil {
+				t.Fatalf("expected malformed firing trigger IDs to be rejected")
+			}
+		})
+	}
+}
+
+func TestParseRejectsFiringTriggerIDsOnNonTagActions(t *testing.T) {
+	_, err := plan.Parse([]byte(`
+accountId: "123"
+containerId: "456"
+workspaceId: "7"
+actions:
+  - kind: createTrigger
+    name: "All Pages"
+    type: "PAGEVIEW"
+    firingTriggerId: "20"
+`))
+	if err == nil || !strings.Contains(err.Error(), "only valid for createTag") {
+		t.Fatalf("expected scoped firing trigger validation error, got %v", err)
+	}
+}
+
+func TestParseRejectsNonStringResourceTypes(t *testing.T) {
+	tests := []struct {
+		name      string
+		kind      string
+		typeValue string
+	}{
+		{name: "numeric trigger type", kind: "createTrigger", typeValue: "123"},
+		{name: "boolean tag type", kind: "createTag", typeValue: "true"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			raw := []byte("accountId: \"123\"\n" +
+				"containerId: \"456\"\n" +
+				"workspaceId: \"7\"\n" +
+				"actions:\n" +
+				"  - kind: " + test.kind + "\n" +
+				"    name: \"resource\"\n" +
+				"    type: " + test.typeValue + "\n")
+			if _, err := plan.Parse(raw); err == nil || !strings.Contains(err.Error(), "type must be a string") {
+				t.Fatalf("expected non-string type to be rejected, got %v", err)
+			}
+		})
+	}
+}
+
+func TestParseRejectsConfigThatOverridesDeclarativeFields(t *testing.T) {
+	tests := []struct {
+		name   string
+		kind   string
+		config string
+	}{
+		{name: "trigger name", kind: "createTrigger", config: `name: "hidden override"`},
+		{name: "trigger type", kind: "createTrigger", config: `type: "hidden override"`},
+		{name: "tag firing trigger", kind: "createTag", config: `firingTriggerId: ["20"]`},
+		{name: "tag plural firing trigger", kind: "createTag", config: `firingTriggerIds: ["20"]`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			raw := []byte("accountId: \"123\"\n" +
+				"containerId: \"456\"\n" +
+				"workspaceId: \"7\"\n" +
+				"actions:\n" +
+				"  - kind: " + test.kind + "\n" +
+				"    name: \"resource\"\n" +
+				"    type: \"safe-type\"\n" +
+				"    config:\n" +
+				"      " + test.config + "\n")
+			if _, err := plan.Parse(raw); err == nil || !strings.Contains(err.Error(), "config key") {
+				t.Fatalf("expected config override to be rejected, got %v", err)
+			}
+		})
+	}
+}
+
 func TestPublishRequiresExplicitGateAndContainerConfirmation(t *testing.T) {
 	raw := []byte(`
 accountId: "123"
@@ -156,4 +351,13 @@ func render(commands []plan.Command) string {
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+func flagValue(args []string, name string) string {
+	for i, arg := range args {
+		if arg == name && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
 }

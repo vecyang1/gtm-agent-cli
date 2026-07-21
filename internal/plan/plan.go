@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -17,13 +18,15 @@ type Plan struct {
 }
 
 type Action struct {
-	Kind      string         `json:"kind" yaml:"kind"`
-	Name      string         `json:"name,omitempty" yaml:"name,omitempty"`
-	Type      string         `json:"type,omitempty" yaml:"type,omitempty"`
-	Types     []string       `json:"types,omitempty" yaml:"types,omitempty"`
-	Config    map[string]any `json:"config,omitempty" yaml:"config,omitempty"`
-	VersionID string         `json:"versionId,omitempty" yaml:"versionId,omitempty"`
-	Notes     string         `json:"notes,omitempty" yaml:"notes,omitempty"`
+	Kind             string         `json:"kind" yaml:"kind"`
+	Name             string         `json:"name,omitempty" yaml:"name,omitempty"`
+	Type             string         `json:"type,omitempty" yaml:"type,omitempty"`
+	Types            []string       `json:"types,omitempty" yaml:"types,omitempty"`
+	Config           map[string]any `json:"config,omitempty" yaml:"config,omitempty"`
+	FiringTriggerID  *string        `json:"firingTriggerId,omitempty" yaml:"firingTriggerId,omitempty"`
+	FiringTriggerIDs *[]string      `json:"firingTriggerIds,omitempty" yaml:"firingTriggerIds,omitempty"`
+	VersionID        string         `json:"versionId,omitempty" yaml:"versionId,omitempty"`
+	Notes            string         `json:"notes,omitempty" yaml:"notes,omitempty"`
 }
 
 type Options struct {
@@ -42,6 +45,9 @@ func Parse(raw []byte) (Plan, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&p); err != nil {
+		return Plan{}, err
+	}
+	if err := validateActionFieldNodes(raw); err != nil {
 		return Plan{}, err
 	}
 	if strings.TrimSpace(p.AccountID) == "" {
@@ -94,11 +100,18 @@ func (p Plan) argsFor(action Action, options Options) ([]string, error) {
 		return withOutput(args), nil
 	case "createTrigger":
 		args := []string{"triggers", "create", "--name", action.Name, "--type", action.Type}
+		if action.Config != nil {
+			encoded, err := encodeConfig(action.Config)
+			if err != nil {
+				return nil, err
+			}
+			args = append(args, "--config", encoded)
+		}
 		args = append(args, workspaceBase...)
 		return withOutput(args), nil
 	case "createVariable":
 		args := []string{"variables", "create", "--name", action.Name, "--type", action.Type}
-		if len(action.Config) > 0 {
+		if action.Config != nil {
 			encoded, err := encodeConfig(action.Config)
 			if err != nil {
 				return nil, err
@@ -109,12 +122,19 @@ func (p Plan) argsFor(action Action, options Options) ([]string, error) {
 		return withOutput(args), nil
 	case "createTag":
 		args := []string{"tags", "create", "--name", action.Name, "--type", action.Type}
-		if len(action.Config) > 0 {
+		if action.Config != nil {
 			encoded, err := encodeConfig(action.Config)
 			if err != nil {
 				return nil, err
 			}
 			args = append(args, "--config", encoded)
+		}
+		triggerIDs, err := firingTriggerIDs(action)
+		if err != nil {
+			return nil, err
+		}
+		if len(triggerIDs) > 0 {
+			args = append(args, "--firing-trigger-id", strings.Join(triggerIDs, ","))
 		}
 		args = append(args, workspaceBase...)
 		return withOutput(args), nil
@@ -141,6 +161,9 @@ func (p Plan) argsFor(action Action, options Options) ([]string, error) {
 }
 
 func validateAction(action Action) error {
+	if action.Kind != "createTag" && (action.FiringTriggerID != nil || action.FiringTriggerIDs != nil) {
+		return fmt.Errorf("firingTriggerId and firingTriggerIds are only valid for createTag")
+	}
 	switch action.Kind {
 	case "enableBuiltInVariables":
 		if len(action.Types) == 0 {
@@ -153,6 +176,19 @@ func validateAction(action Action) error {
 		if strings.TrimSpace(action.Type) == "" {
 			return fmt.Errorf("type is required")
 		}
+		if action.Config != nil {
+			if err := validateConfigKeys(action); err != nil {
+				return err
+			}
+			if _, err := encodeConfig(action.Config); err != nil {
+				return fmt.Errorf("config must be valid JSON: %w", err)
+			}
+		}
+		if action.Kind == "createTag" {
+			if _, err := firingTriggerIDs(action); err != nil {
+				return err
+			}
+		}
 	case "createVersion":
 		if strings.TrimSpace(action.Name) == "" {
 			return fmt.Errorf("name is required")
@@ -163,6 +199,107 @@ func validateAction(action Action) error {
 		}
 	default:
 		return fmt.Errorf("unsupported action kind %q", action.Kind)
+	}
+	return nil
+}
+
+func validateConfigKeys(action Action) error {
+	reserved := map[string]struct{}{
+		"name": {},
+		"type": {},
+	}
+	if action.Kind == "createTag" {
+		reserved["firingTriggerId"] = struct{}{}
+		reserved["firingTriggerIds"] = struct{}{}
+	}
+	for key := range action.Config {
+		if _, found := reserved[key]; found {
+			return fmt.Errorf("config key %q must use the declarative action field instead", key)
+		}
+	}
+	return nil
+}
+
+func firingTriggerIDs(action Action) ([]string, error) {
+	if action.FiringTriggerID != nil && action.FiringTriggerIDs != nil {
+		return nil, fmt.Errorf("use either firingTriggerId or firingTriggerIds, not both")
+	}
+	var ids []string
+	switch {
+	case action.FiringTriggerID != nil:
+		ids = []string{*action.FiringTriggerID}
+	case action.FiringTriggerIDs != nil:
+		ids = append([]string{}, (*action.FiringTriggerIDs)...)
+		if len(ids) == 0 {
+			return nil, fmt.Errorf("firingTriggerIds must contain at least one ID")
+		}
+	default:
+		return nil, nil
+	}
+	seen := make(map[string]struct{}, len(ids))
+	for i, id := range ids {
+		if strings.TrimSpace(id) != id || id == "" {
+			return nil, fmt.Errorf("firing trigger ID at index %d must be a non-empty decimal ID without surrounding whitespace", i)
+		}
+		if id[0] == '0' {
+			return nil, fmt.Errorf("firing trigger ID at index %d must be a positive decimal ID", i)
+		}
+		if _, err := strconv.ParseUint(id, 10, 64); err != nil {
+			return nil, fmt.Errorf("firing trigger ID at index %d must be a positive decimal ID", i)
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return nil, fmt.Errorf("firing trigger ID %q is duplicated", id)
+		}
+		seen[id] = struct{}{}
+	}
+	return ids, nil
+}
+
+func validateActionFieldNodes(raw []byte) error {
+	var document yaml.Node
+	if err := yaml.Unmarshal(raw, &document); err != nil {
+		return err
+	}
+	if len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
+		return nil
+	}
+	root := document.Content[0]
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value != "actions" {
+			continue
+		}
+		actions := root.Content[i+1]
+		if actions.Kind != yaml.SequenceNode {
+			return nil
+		}
+		for actionIndex, action := range actions.Content {
+			if action.Kind != yaml.MappingNode {
+				continue
+			}
+			for fieldIndex := 0; fieldIndex+1 < len(action.Content); fieldIndex += 2 {
+				name := action.Content[fieldIndex].Value
+				value := action.Content[fieldIndex+1]
+				switch name {
+				case "type":
+					if value.Kind != yaml.ScalarNode || value.Tag != "!!str" {
+						return fmt.Errorf("actions[%d]: type must be a string", actionIndex)
+					}
+				case "firingTriggerId":
+					if value.Kind != yaml.ScalarNode || value.Tag != "!!str" {
+						return fmt.Errorf("actions[%d]: firingTriggerId must be a quoted string", actionIndex)
+					}
+				case "firingTriggerIds":
+					if value.Kind != yaml.SequenceNode {
+						return fmt.Errorf("actions[%d]: firingTriggerIds must be a list of quoted strings", actionIndex)
+					}
+					for idIndex, id := range value.Content {
+						if id.Kind != yaml.ScalarNode || id.Tag != "!!str" {
+							return fmt.Errorf("actions[%d]: firingTriggerIds[%d] must be a quoted string", actionIndex, idIndex)
+						}
+					}
+				}
+			}
+		}
 	}
 	return nil
 }

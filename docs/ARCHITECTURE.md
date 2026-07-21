@@ -38,32 +38,45 @@ Build a strong agent-friendly Google Tag Manager control-plane CLI without reinv
 
 Plans can be YAML or JSON:
 
+Trigger phase:
+
 ```yaml
 accountId: "123"
 containerId: "456"
 workspaceId: "7"
 actions:
-  - kind: enableBuiltInVariables
-    types: ["pageUrl", "clickText"]
   - kind: createTrigger
-    name: "All Pages"
-    type: "pageview"
+    name: "CE - article_product_click"
+    type: "CUSTOM_EVENT"
+    config:
+      customEventFilter:
+        - type: EQUALS
+          parameter:
+            - {type: TEMPLATE, key: arg0, value: "{{_event}}"}
+            - {type: TEMPLATE, key: arg1, value: article_product_click}
+```
+
+After execution and a fresh inventory read, the returned ID is used in a separate tag plan:
+
+```yaml
+accountId: "123"
+containerId: "456"
+workspaceId: "7"
+actions:
   - kind: createTag
-    name: "GA4 purchase"
+    name: "GA4 - article_product_click"
     type: "gaawe"
+    firingTriggerIds: ["20"]
     config:
       parameter:
         - type: template
           key: eventName
-          value: purchase
-  - kind: createVersion
-    name: "agent release"
-    notes: "Created by gtm-agent"
-  - kind: publishVersion
-    versionId: "42"
+          value: article_product_click
 ```
 
 The first release intentionally supports the highest-value safe workflow primitives and leaves deep endpoint-specific authoring to raw upstream passthrough.
+
+Trigger configuration is encoded into the upstream `--config` JSON argument. Reserved declarative fields (`name`, `type`, and tag firing-trigger fields) cannot be overridden inside config. A tag can bind to one `firingTriggerId` or several `firingTriggerIds`; the plan compiler validates quoted positive-decimal IDs and emits the upstream comma-separated `--firing-trigger-id` form. Because GTM generates IDs at mutation time, references to a newly created trigger use two reviewed plans with an inventory read between them. Offline plan compilation intentionally does not claim live exact-name uniqueness.
 
 ## Verification
 
@@ -75,4 +88,3 @@ Required checks before claiming completion:
 - `go build -o ./gtm-agent ./cmd/gtm-agent`
 - Fake upstream E2E: install a temporary `gtm` script on `PATH`, run doctor, inventory, snapshot, diff, dry-run apply, guarded publish failure, allowed publish success, and raw passthrough.
 - If real GTM credentials are already available safely, run read-only `auth status` / inventory smoke. Do not create or publish real GTM resources without an explicit safe target.
-

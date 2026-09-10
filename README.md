@@ -43,6 +43,7 @@ Grant the service account access inside Google Tag Manager before using it.
 
 ```bash
 gtm-agent doctor --json
+python3 skills/gtm-agent/scripts/check_account_admins.py --account-id 123
 gtm-agent --version
 gtm-agent inventory --account-id 123 --container-id 456 --workspace-id 7 --json
 gtm-agent snapshot --account-id 123 --container-id 456 --workspace-id 7 --out snapshots/before.json
@@ -66,6 +67,7 @@ gtm-agent guide
 - Snapshots, backups, service-account JSON, tokens, and env files are ignored by default.
 - Snapshot/backup outputs inside the repo must live under `snapshots/` or `backups/`, or use `.snapshot.json` / `.backup.json` suffixes unless `--allow-unsafe-out` is present.
 - Unit and E2E tests use a fake upstream `gtm` binary and never touch a real GTM account.
+- The skill-local account-admin check is read-only and reports `ready` only for at least two distinct account-level administrators. It returns `2` for insufficient recovery access, `3` when the current credential cannot verify user permissions, and `64` for invalid invocation; it never prints administrator identities.
 
 ## Declarative Plan
 
@@ -145,15 +147,17 @@ The repo includes `skills/gtm-agent/SKILL.md`. For Codex/Gemini/Claude-style loc
 
 The script creates or refreshes symlinks in:
 
-- `~/.agents/skills/gtm-agent`
-- `~/.codex/skills/gtm-agent`
-- `~/.gemini/antigravity/skills/gtm-agent`
-- `~/.claude/skills/gtm-agent`
+- `$HOME/.agents/skills/gtm-agent`
+- `$HOME/.codex/skills/gtm-agent`
+- `$HOME/.gemini/antigravity/skills/gtm-agent`
+- `$HOME/.claude/skills/gtm-agent`
 
 ## Verification
 
 ```bash
 go mod verify
+python3 skills/gtm-agent/tests/test_contract.py
+python3 skills/gtm-agent/tests/test_account_admin_check.py
 go test ./...
 go vet ./...
 go build -o ./gtm-agent ./cmd/gtm-agent
@@ -182,4 +186,4 @@ This project is unofficial and is not affiliated with, endorsed by, or supported
 
 ## License
 
-AGPL-3.0-or-later.
+MIT.

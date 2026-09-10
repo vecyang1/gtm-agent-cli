@@ -18,3 +18,26 @@ backups/
 *service-account*.json
 *credentials*.json
 *token*.json
+
+# Python cache & artifacts
+__pycache__/
+*.pyc
+
+# Private files & local state
+VAULT.md
+decisions.md
+progress.md
+task_plan.md
+handoff.md
+CLAUDE.md
+GEMINI.md
+CODEX.md
+PROJECT_LINKS.md
+FILE_MAP_INDEX.md
+PRINCIPLES.md
+MEMORY.md
+graphify-out/
+.planning/
+.specify/
+.agent/
+.claude/

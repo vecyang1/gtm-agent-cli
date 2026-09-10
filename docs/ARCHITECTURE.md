@@ -26,6 +26,25 @@ Build a strong agent-friendly Google Tag Manager control-plane CLI without reinv
 - `gtm-agent raw -- ...`: passes through to the upstream `gtm` CLI for the full command surface.
 - `gtm-agent guide`: prints the local agent playbook and credits the upstream wheel.
 
+## Account Administrator Redundancy Readiness
+
+The skill-local `scripts/check_account_admins.py` is the account-recovery gate.
+It invokes the upstream read-only `user-permissions list` command through
+`gtm-agent raw`, then counts only distinct `accountAccess.permission = admin`
+records. Container-level `publish` access is deliberately excluded. The report
+contains only account ID, status, counts, and a non-secret reason: it does not
+emit administrator identities.
+
+`ready` requires at least two distinct account administrators. `needs_admin`
+uses exit code `2` and requires the account owner to select an independent
+backup administrator before any separate access mutation. `unknown` uses exit
+code `3` when the permission read cannot complete, has an unexpected response,
+or cannot establish unique administrator identities. The recovery path is to
+authorize a credential with `tagmanager.manage.users` and rerun; neither a
+container publisher nor a successful tag inventory proves account recovery.
+Invalid invocation uses exit code `64`, so it cannot be mistaken for a
+`needs_admin` recovery finding.
+
 ## Safety Contract
 
 - No mutation happens without `--execute`.
@@ -83,6 +102,8 @@ Trigger configuration is encoded into the upstream `--config` JSON argument. Res
 Required checks before claiming completion:
 
 - `go mod tidy`
+- `python3 skills/gtm-agent/tests/test_contract.py`
+- `python3 skills/gtm-agent/tests/test_account_admin_check.py`
 - `go test ./...`
 - `go vet ./...`
 - `go build -o ./gtm-agent ./cmd/gtm-agent`

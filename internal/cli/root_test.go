@@ -329,6 +329,51 @@ func TestCLIRawAllowsPublishWithUnsafeGateAndConfirmation(t *testing.T) {
 	}
 }
 
+// A workspace that no longer exists must not be reported as an empty one.
+// Publishing consumes the workspace it was published from, and the upstream
+// list commands answer a dead workspace ID with `[]` and exit 0. Without this
+// guard, `snapshot` writes a zero-resource file and the follow-up `diff`
+// reports every real tag and built-in variable as "removed" — a false
+// mass-deletion report produced entirely by our own documented workflow.
+func TestSnapshotRefusesAWorkspaceThatNoLongerExists(t *testing.T) {
+	fake := runner.NewFake(map[string]runner.Result{
+		"gtm --version":                    {Stdout: "gtm version 1.5.8\n"},
+		"gtm accounts list --output json":  {Stdout: `[{"accountId":"123","name":"Main"}]` + "\n"},
+		"gtm containers list --account-id 123 --output json": {Stdout: `[{"containerId":"456","name":"Web"}]` + "\n"},
+		// Workspace 7 was consumed by a publish; GTM left a fresh workspace 10.
+		"gtm workspaces list --account-id 123 --container-id 456 --output json": {
+			Stdout: `[{"workspaceId":"10","name":"Default Workspace"}]` + "\n",
+		},
+		// The upstream CLI answers the dead workspace with empty lists, not errors.
+		"gtm tags list --account-id 123 --container-id 456 --workspace-id 7 --output json":              {Stdout: `[]` + "\n"},
+		"gtm triggers list --account-id 123 --container-id 456 --workspace-id 7 --output json":          {Stdout: `[]` + "\n"},
+		"gtm variables list --account-id 123 --container-id 456 --workspace-id 7 --output json":         {Stdout: `[]` + "\n"},
+		"gtm built-in-variables list --account-id 123 --container-id 456 --workspace-id 7 --output json": {Stdout: `[]` + "\n"},
+		"gtm version-headers list --account-id 123 --container-id 456 --output json":                    {Stdout: `[]` + "\n"},
+	})
+
+	tmp := t.TempDir()
+	outPath := filepath.Join(tmp, "after.json")
+	var out, errOut bytes.Buffer
+	cmd := cli.NewRoot(cli.Options{Out: &out, Err: &errOut, Runner: fake})
+	cmd.SetArgs([]string{"snapshot", "--account-id", "123", "--container-id", "456", "--workspace-id", "7", "--out", outPath})
+
+	err := cmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatalf("expected snapshot to refuse a workspace that is not in the container; it silently succeeded and wrote %s", outPath)
+	}
+	// The remedy must travel with the error (rung 3): a caller who never read
+	// the skill still has to learn what to do instead.
+	for _, want := range []string{"workspace 7", "no longer exists", "publish", "compare published versions"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error must carry the remedy, missing %q: %v", want, err)
+		}
+	}
+	if _, statErr := os.Stat(outPath); statErr == nil {
+		t.Fatalf("a refused snapshot must not leave a misleading zero-resource file at %s", outPath)
+	}
+}
+
 func runCLI(t *testing.T, fake *runner.Fake, args ...string) string {
 	t.Helper()
 	var out, errOut bytes.Buffer

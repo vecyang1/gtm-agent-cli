@@ -403,8 +403,55 @@ func (rt *runtime) collectInventory(ctx context.Context, accountID, containerID,
 			return snapshot.Snapshot{}, fmt.Errorf("%s inventory parse failed: %w", command.kind, err)
 		}
 		resources[command.kind] = items
+		// Checked here, before the per-workspace lists run, so a dead workspace
+		// costs one call instead of five and can never reach the output file.
+		if command.kind == "workspaces" {
+			if err := requireExistingWorkspace(containerID, workspaceID, items); err != nil {
+				return snapshot.Snapshot{}, err
+			}
+		}
 	}
 	return snapshot.New(accountID, containerID, workspaceID, resources), nil
+}
+
+// requireExistingWorkspace refuses a workspace the container no longer lists.
+//
+// Publishing consumes the workspace it was published from: GTM deletes it and
+// creates a fresh Default Workspace under a new ID. The upstream list commands
+// answer a dead workspace ID with `[]` and exit 0, which is indistinguishable
+// from a genuinely empty workspace. Without this check, an inventory or
+// snapshot of it looks like a container that lost everything, and the
+// before/after diff in our own documented workflow then reports every real tag
+// and built-in variable as "removed" — a false mass-deletion report that invites
+// a destructive "restore".
+//
+// Fails open when the container lists no workspaces at all: that is an
+// unreadable container rather than a missing workspace, and inventing a failure
+// there would be worse than the silence it replaces.
+func requireExistingWorkspace(containerID, workspaceID string, workspaces []snapshot.Resource) error {
+	if len(workspaces) == 0 {
+		return nil
+	}
+	known := make([]string, 0, len(workspaces))
+	for _, workspace := range workspaces {
+		id := workspace.ID
+		if raw, ok := workspace.Raw["workspaceId"].(string); ok && raw != "" {
+			id = raw
+		}
+		if id == workspaceID {
+			return nil
+		}
+		if id != "" {
+			known = append(known, id)
+		}
+	}
+	return fmt.Errorf(
+		"workspace %s no longer exists in container %s (container currently has: %s); "+
+			"a publish consumes the workspace it was published from, so this is expected right after publishing and is not data loss. "+
+			"To check what a publish changed, compare published versions "+
+			"(gtm-agent raw -- versions get --version-id <previous-live>, then <new-live>) instead of before/after workspace snapshots; "+
+			"to inventory current work, re-run against a workspace ID that still exists",
+		workspaceID, containerID, strings.Join(known, ", "))
 }
 
 func (rt *runtime) gtmBinary(ctx context.Context) string {

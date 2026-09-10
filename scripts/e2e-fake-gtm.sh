@@ -21,6 +21,9 @@ case "$*" in
   "config get --output json")
     echo '{"defaultAccountId":"123","defaultContainerId":"456","defaultWorkspaceId":"7"}'
     ;;
+  "user-permissions list --account-id 123 --output json")
+    echo '[{"emailAddress":"owner@example.com","accountAccess":{"permission":"admin"}},{"emailAddress":"backup@example.com","accountAccess":{"permission":"admin"}}]'
+    ;;
   "accounts list --output json")
     echo '[{"accountId":"123","name":"Main"}]'
     ;;
@@ -84,6 +87,7 @@ cd "$ROOT"
 go build -o "$TMP/gtm-agent" ./cmd/gtm-agent
 
 "$TMP/gtm-agent" doctor --json | grep -q '"upstreamOK": true'
+python3 skills/gtm-agent/scripts/check_account_admins.py --account-id 123 --gtm-agent "$TMP/gtm-agent" | grep -q '"status": "ready"'
 "$TMP/gtm-agent" inventory --account-id 123 --container-id 456 --workspace-id 7 --json | grep -q 'GA4 purchase'
 "$TMP/gtm-agent" snapshot --account-id 123 --container-id 456 --workspace-id 7 --out "$TMP/before.json" --json | grep -q "$TMP/before.json"
 cp "$TMP/before.json" "$TMP/after.json"

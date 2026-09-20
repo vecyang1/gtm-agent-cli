@@ -44,7 +44,7 @@ Use this skill for Google Tag Manager operations.
 - Prefer a dedicated GTM workspace for changes.
 - Use `gtm-agent raw -- ...` only when the declarative safety layer lacks a needed upstream command.
 - Mutating raw commands require `--allow-mutation`; raw publish requires `--allow-publish --confirm <container-id>`.
-- Declarative trigger plans support `config`; tag plans support either `firingTriggerId` or `firingTriggerIds`, using quoted positive-decimal IDs only.
+- Declarative trigger plans support `config`; tag plans support either `firingTriggerId` / `firingTriggerIds` or `blockingTriggerId` / `blockingTriggerIds`, using quoted positive-decimal IDs only. For promotional widgets and third-party trackers, enforce blocking triggers on conversion-critical paths (`cart`, `checkout`, `thank-you`, `order-received`, `receipt`, `customer-dashboard`) to protect conversion rates and third-party quotas.
 - When a tag needs a newly created trigger, use two plans: create the trigger, inventory the workspace to obtain its assigned ID, then create the tag. Before each create, inspect inventory for an exact-name match.
 
 ## Enough Or Extend

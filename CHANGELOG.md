@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed Conversion Linker cross-domain parameter hygiene in Container `GTM-5G7SFL9R` (Version 25): pruned self-referencing root domain `worldinspirelab.com` and subdomains from `linkerDomains`, restricting cross-domain tracking strictly to verified external destinations (`zylvie.com, buildfast.fyi`) to eliminate unwanted `_gl` URL decorations.
 - Sanitized local machine absolute paths in README and SKILL documentation; added private file rules to .gitignore.
 
 - **`inventory` and `snapshot` now refuse a workspace the container no longer

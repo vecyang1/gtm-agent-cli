@@ -48,6 +48,12 @@
   deployment/audit gate for every WordPress + SureCart site in that ownership
   mode. Documentation only; no CLI behavior changed.
 
+## [2026-09-22] - 2026-09-22
+
+### Documentation
+- Add Conversion Linker and cross-domain linker hygiene section (`214b051`)
+- Add upstream raw versions publish explicit long-form flags guidance (`-c` ambiguity resolution and unattended `--confirm` requirement) and Meta Pixel & CAPI client/server purchase deduplication profile (`{ eventID: {{DLV - ecommerce.transaction_id}} }`).
+
 ## 0.2.0 - 2026-07-21
 
 - Clarified GTM skill readiness checks, site-snippet prerequisite, and when to use raw upstream commands versus extending `gtm-agent`.

@@ -44,6 +44,7 @@ Use this skill for Google Tag Manager operations.
 - Prefer a dedicated GTM workspace for changes.
 - Use `gtm-agent raw -- ...` only when the declarative safety layer lacks a needed upstream command.
 - Mutating raw commands require `--allow-mutation`; raw publish requires `--allow-publish --confirm <container-id>`.
+- When invoking upstream raw version publish (`gtm-agent raw -- versions publish`), always use explicit long-form flags `--account-id <id> --container-id <id> --version-id <id> --confirm <id>`. Never use `-c` because upstream CLI treats `-c` as ambiguous between `--child-container-id` and `--container-id`, and omitting `--confirm` prompts interactively on stdin which blocks unattended automation.
 - Declarative trigger plans support `config`; tag plans support either `firingTriggerId` / `firingTriggerIds` or `blockingTriggerId` / `blockingTriggerIds`, using quoted positive-decimal IDs only. For promotional widgets and third-party trackers, enforce blocking triggers on conversion-critical paths (`cart`, `checkout`, `thank-you`, `order-received`, `receipt`, `customer-dashboard`) to protect conversion rates and third-party quotas.
 - When a tag needs a newly created trigger, use two plans: create the trigger, inventory the workspace to obtain its assigned ID, then create the tag. Before each create, inspect inventory for an exact-name match.
 
@@ -189,6 +190,23 @@ receipt open until a safe post-release paid order is reconciled in the exact
 GA4 property after the reporting-delay grace period. Never expect a later
 version to backfill a paid order that occurred before publication.
 
+## Meta Pixel & Conversions API (CAPI) Deduplication Profile
+
+Use this profile when deploying Meta Pixel (Facebook Pixel / Dataset) alongside backend Conversions API (CAPI):
+
+- Dual-tracking without deduplication causes duplicate purchase events and artificially inflates reported ROAS.
+- **Client/Server Deduplication Contract**:
+  1. Identical event name across browser and server (e.g. `Purchase`).
+  2. Identical `eventID` / `event_id`:
+     - In GTM Custom HTML (browser tag): pass `{ eventID: {{DLV - ecommerce.transaction_id}} }` as the 4th argument:
+       `fbq('track', 'Purchase', { value: {{DLV - ecommerce.value}}, currency: '{{DLV - ecommerce.currency}}', content_type: 'product' }, { eventID: {{DLV - ecommerce.transaction_id}} });`
+     - In Server CAPI payload: pass `"event_id": "<transaction_id>"`.
+- **E-Commerce Funnel Mapping**:
+  Map DataLayer ecommerce events into standard Meta events:
+  `view_item` ➔ `ViewContent`, `add_to_cart` ➔ `AddToCart`, `begin_checkout` ➔ `InitiateCheckout`, `purchase` ➔ `Purchase`.
+- **Preflight & Verification**:
+  Assert the container tag includes `{ eventID: {{DLV - ecommerce.transaction_id}} }` before publishing; test CAPI connectivity against Meta Graph API endpoint (`https://graph.facebook.com/v19.0/{dataset_id}/events`) with a synthetic test event.
+
 ## First-Party And Server-Side Execution Boundary
 
 Implement the architecture selected by `analytics-tracking`; do not collapse
@@ -253,6 +271,9 @@ Publish only after review:
 
 ```bash
 gtm-agent apply publish.yaml --execute --allow-publish --confirm <container-id> --json
+
+# Or upstream raw version publish (requires explicit long flags; -c is ambiguous):
+gtm-agent raw -- versions publish --account-id <account> --container-id <container> --version-id <version> --confirm <container-id> --allow-publish
 ```
 
 ### Verify A Publish By Comparing Versions, Not Workspaces

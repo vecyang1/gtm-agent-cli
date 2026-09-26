@@ -114,6 +114,13 @@ Keep these routes distinct:
   presence/configuration an explicit Google Ads attribution gate. Do not add
   Conversion Linker to a GA4-only ecommerce bridge. No Analytics destination
   is a prerequisite for this direct route.
+- **Base Google Tag (`googtag`) on All Pages for Google Ads:** When configuring
+  direct Google Ads tracking (`AW-...`), a base Google Tag (`googtag` with
+  `tagId: AW-XXXXX`) MUST be deployed firing on **All Pages** (or Initialization
+  + All Pages). Relying solely on conversion tags (e.g. `awct` on `purchase`)
+  without a base Google Tag causes Google Ads Data Manager to detect no signals
+  during conversion gaps exceeding 48 hours, triggering hard red alerts:
+  `Tag stopped sending data` and `Some of your pages are not tagged [URGENT]`.
 - **GA4 key-event import:** is a separate Google Ads/GA4 Admin route. It needs
   the exact linked property and Ads account, an enabled key event, and a
   receipt that the business outcome reaches that property. It is not a GTM

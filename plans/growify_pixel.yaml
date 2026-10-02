@@ -1,0 +1,21 @@
+accountId: "6339218068"
+containerId: "243541856"
+workspaceId: "20"
+actions:
+  - kind: createTag
+    name: "Growify Pixel"
+    type: "html"
+    firingTriggerIds:
+      - "2147479553"
+    config:
+      tagFiringOption: "oncePerLoad"
+      priority:
+        type: "integer"
+        value: "99"
+      parameter:
+        - type: template
+          key: html
+          value: '<script src="https://cdn.growify.ai/pixel.min.js" data-website-id="89a6a3fc1c52480a6e33eae72dfafcb8:12d6a1e6361940df362b8974c9f8a0d35ba465c9b6e91edb53ebc9eef886c5eb3580f6dafc57d634714f5805267ce659" data-endpoint="api_v2" data-platform="web"></script>'
+        - type: boolean
+          key: supportDocumentWrite
+          value: "true"

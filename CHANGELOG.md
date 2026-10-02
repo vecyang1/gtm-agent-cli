@@ -48,6 +48,19 @@
   deployment/audit gate for every WordPress + SureCart site in that ownership
   mode. Documentation only; no CLI behavior changed.
 
+## [2026-10-02] - 2026-10-02
+
+### Added
+- Deployed Growify PowerPixel base code on All Pages (Container `GTM-P8VTXJ65`, Version 19) for `example.com`:
+  - Tag Name: `Growify Pixel` (Tag ID `37`, Custom HTML, priority `99`, `oncePerLoad`, support `document.write`).
+  - Website ID: `89a6a3fc1c52480a6e33eae72dfafcb8:12d6a1e6361940df362b8974c9f8a0d35ba465c9b6e91edb53ebc9eef886c5eb3580f6dafc57d634714f5805267ce659`.
+  - Verified live runtime execution: `pixel.min.js` 200 OK, event dispatched to `https://us-central1-growify-346505.cloudfunctions.net/grpV2`, and `__grp_grp_uid` cookie persisted on `example.com`.
+
+## [2026-09-28] - 2026-09-28
+
+### Documentation
+- Document Google Ads base Google Tag requirement on All Pages (`ff4ddc7`)
+
 ## [2026-09-22] - 2026-09-22
 
 ### Documentation

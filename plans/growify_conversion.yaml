@@ -1,0 +1,118 @@
+accountId: "6339218068"
+containerId: "243541856"
+workspaceId: "21"
+actions:
+  - kind: createTag
+    name: "Growify - Purchase Conversion"
+    type: "html"
+    firingTriggerIds:
+      - "22"
+    config:
+      tagFiringOption: "oncePerEvent"
+      parameter:
+        - type: template
+          key: html
+          value: |
+            <script type="application/javascript">
+            (function() {
+              window.grpQueue = window.grpQueue || [];
+              if (!window.grp) {
+                window.grp = function () {
+                  window.grpQueue.push(arguments);
+                };
+              }
+
+              try {
+                var dl = window.dataLayer || [];
+                var purchaseEvent = null;
+                for (var i = dl.length - 1; i >= 0; i--) {
+                  if (dl[i] && (dl[i].event === 'purchase' || (dl[i].ecommerce && dl[i].ecommerce.purchase))) {
+                    purchaseEvent = dl[i];
+                    break;
+                  }
+                }
+
+                var ecommerce = (purchaseEvent && purchaseEvent.ecommerce) ? purchaseEvent.ecommerce : {};
+                var purchaseData = ecommerce.purchase || ecommerce;
+                var rawItems = purchaseData.items || purchaseData.products || [];
+
+                var orderId = String(purchaseData.transaction_id || purchaseData.order_id || '{{DLV - ecommerce.transaction_id}}' || '');
+                if (!orderId || orderId === 'undefined' || orderId === 'null') {
+                  return;
+                }
+
+                var totalVal = parseFloat(purchaseData.value || '{{DLV - ecommerce.value}}') || 0;
+                var products = [];
+
+                if (Array.isArray(rawItems) && rawItems.length > 0) {
+                  for (var j = 0; j < rawItems.length; j++) {
+                    var it = rawItems[j];
+                    if (!it) continue;
+                    var pPrice = parseFloat(it.price);
+                    if (isNaN(pPrice) || pPrice <= 0) {
+                      pPrice = totalVal > 0 ? totalVal : 1;
+                    }
+                    var pQty = parseInt(it.quantity, 10);
+                    if (isNaN(pQty) || pQty <= 0) {
+                      pQty = 1;
+                    }
+                    var pId = String(it.item_id || it.id || it.sku || ('SKU_' + orderId));
+                    var pName = String(it.item_name || it.name || ('Item ' + (j + 1)));
+                    var pBrand = String(it.item_brand || it.brand || 'GlintMuse');
+                    var pVal = parseFloat(it.value) || (pPrice * pQty);
+
+                    products.push({
+                      productId: pId,
+                      productName: pName,
+                      productPrice: pPrice,
+                      productBrand: pBrand,
+                      productQuantity: pQty,
+                      purchaseValue: pVal
+                    });
+                  }
+                }
+
+                if (products.length === 0 && totalVal > 0) {
+                  products.push({
+                    productId: 'ORDER_' + orderId,
+                    productName: 'Order ' + orderId,
+                    productPrice: totalVal,
+                    productBrand: 'GlintMuse',
+                    productQuantity: 1,
+                    purchaseValue: totalVal
+                  });
+                }
+
+                if (products.length > 0) {
+                  var payload = {
+                    orderId: orderId,
+                    tax: parseFloat(purchaseData.tax) || 0,
+                    shipping: parseFloat(purchaseData.shipping) || 0,
+                    products: products
+                  };
+
+                  if (purchaseEvent.userEmail || purchaseEvent.customerEmail) {
+                    payload.userEmail = purchaseEvent.userEmail || purchaseEvent.customerEmail;
+                  }
+                  if (purchaseEvent.userFirstName || purchaseEvent.customerFirstName) {
+                    payload.userFirstName = purchaseEvent.userFirstName || purchaseEvent.customerFirstName;
+                  }
+                  if (purchaseEvent.userLastName || purchaseEvent.customerLastName) {
+                    payload.userLastName = purchaseEvent.userLastName || purchaseEvent.customerLastName;
+                  }
+                  if (purchaseEvent.userId || purchaseEvent.customerId) {
+                    payload.userId = purchaseEvent.userId || purchaseEvent.customerId;
+                  }
+
+                  window.grp('conversion', payload);
+                }
+              } catch (err) {
+                if (window.console && window.console.error) {
+                  window.console.error('[Growify GTM] Conversion track error:', err);
+                }
+              }
+            })();
+            </script>
+        - type: boolean
+          key: supportDocumentWrite
+          value: "false"

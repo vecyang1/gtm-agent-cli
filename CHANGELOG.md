@@ -51,6 +51,10 @@
 ## [2026-10-02] - 2026-10-02
 
 ### Added
+- Deployed Growify Purchase Conversion Tag on SureCart Purchase Event (Container `GTM-P8VTXJ65`, Version 20) for `example.com`:
+  - Tag Name: `Growify - Purchase Conversion` (Tag ID `38`, Custom HTML, firing on `CE - SureCart Purchase` / Trigger `22`, `oncePerEvent`).
+  - Extracted orderId, tax, shipping, and products array from SureCart dataLayer with robust fallback handling.
+  - Verified live runtime execution: dispatched gzipped beacon to `https://us-central1-growify-346505.cloudfunctions.net/grpV2` with `ev: "purchase"`, order details, and attribution bridges (`gaid`, `fbid`, `gr_user_id`).
 - Deployed Growify PowerPixel base code on All Pages (Container `GTM-P8VTXJ65`, Version 19) for `example.com`:
   - Tag Name: `Growify Pixel` (Tag ID `37`, Custom HTML, priority `99`, `oncePerLoad`, support `document.write`).
   - Website ID: `89a6a3fc1c52480a6e33eae72dfafcb8:12d6a1e6361940df362b8974c9f8a0d35ba465c9b6e91edb53ebc9eef886c5eb3580f6dafc57d634714f5805267ce659`.

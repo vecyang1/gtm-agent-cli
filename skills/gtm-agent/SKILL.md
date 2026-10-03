@@ -121,6 +121,19 @@ Keep these routes distinct:
   without a base Google Tag causes Google Ads Data Manager to detect no signals
   during conversion gaps exceeding 48 hours, triggering hard red alerts:
   `Tag stopped sending data` and `Some of your pages are not tagged [URGENT]`.
+  - **`googtag` Parameter Schema Invariant**: In `@owntag/gtm-cli` and declarative plans, passing `--config '{"tagId":"AW-XXXXX"}'` fails with `Error: Invalid tag_id (base 10 number expected)` because root-level `tagId` is reserved for the internal numeric tag ID. The Google Tag ID MUST be nested inside the `parameter` list:
+    ```yaml
+    actions:
+      - kind: createTag
+        name: "Google Ads - Google Tag"
+        type: "googtag"
+        firingTriggerId: "2147479553" # All Pages
+        config:
+          parameter:
+            - type: template
+              key: tagId
+              value: "AW-XXXXX"
+    ```
 - **GA4 key-event import:** is a separate Google Ads/GA4 Admin route. It needs
   the exact linked property and Ads account, an enabled key event, and a
   receipt that the business outcome reaches that property. It is not a GTM
@@ -146,7 +159,7 @@ named Google Ads/GA4 configuration owner, then return the resulting receipt to
 
 - **Conversion Linker (`gclidw`) Scope**: Conversion Linker stores ad click information (GCLID/WBRAID/GBRAID) in first-party cookies to preserve attribution across site pages.
 - **Cross-Domain Linking Invariant (`linkerDomains`)**: When enabling cross-domain linking on a Conversion Linker tag (`enableCrossDomain: true`), `linkerDomains` must **strictly contain external root domains only** (e.g. `zylvie.com`, `buildfast.fyi`).
-- **Prohibited Anti-Pattern**: Never list the site's own root domain or subdomains (e.g. `example.org`, `shop.example.org`, `learn.example.org`) in `linkerDomains`. Subdomains on the same root domain natively share first-party cookies under `cookie_domain: 'auto'`. Listing them causes Google Linker to misclassify internal transitions as external departures, polluting internal URLs with `_gl=1*...` parameters, breaking clean URLs, and risking session fragmentation.
+- **Prohibited Anti-Pattern**: Never list the site's own root domain or subdomains (e.g. `example.com`, `shop.example.com`, `learn.example.com`) in `linkerDomains`. Subdomains on the same root domain natively share first-party cookies under `cookie_domain: 'auto'`. Listing them causes Google Linker to misclassify internal transitions as external departures, polluting internal URLs with `_gl=1*...` parameters, breaking clean URLs, and risking session fragmentation.
 - **Diagnostic Gate**: Validate domain topology via `python3 skills/analytics-tracking/scripts/diagnose_cross_domain_linker.py --check-domains <origin> <target>` before configuring linker domains, and run `--gtm-account <acc> --gtm-container <cnt>` to audit live container tags.
 
 ## SureCart GA4 Ecommerce Forwarding Profile

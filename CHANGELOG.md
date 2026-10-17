@@ -48,6 +48,11 @@
   deployment/audit gate for every WordPress + SureCart site in that ownership
   mode. Documentation only; no CLI behavior changed.
 
+## [2026-10-04] - 2026-10-04
+
+### Maintenance
+- Ignore .pytest_cache in gitignore (`8ecf05b`)
+
 ## [2026-10-02] - 2026-10-02
 
 ### Added

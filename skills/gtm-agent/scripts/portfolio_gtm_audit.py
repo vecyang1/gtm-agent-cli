@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-portfolio_gtm_audit.py - Unified Weekly GTM & GA4 Tracking Audit Engine
+portfolio_gtm_audit.py - Unified Weekly GTM & GA4 Tracking Audit & Auto-Build Engine
 
-Audits all in-run business containers across Google Tag Manager and Google Analytics:
+Audits and automatically repairs all in-run business containers across Google Tag Manager and Google Analytics:
 - Live container version health & tag inventory
 - GA4 configuration and measurement ID resolution
 - Conversion Linker & cross-domain attribution hygiene
 - E-commerce and lead conversion event forwarders (view_item, add_to_cart, begin_checkout, purchase, generate_lead)
 - Marketing widget blocking triggers on conversion-critical paths (cart, checkout, thank-you)
 - Public website GTM snippet verification (HTTP probe)
+- Self-healing Auto-Build workflow with safety gates, idempotency checks, rollback backups, and version publishing
 - Generates durable markdown ledger and execution receipts
 """
 
@@ -27,6 +28,29 @@ from typing import Any, Dict, List, Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
+DEFAULT_BACKUP_DIR = SKILL_DIR.parent / "backups"
+
+# Import auto-build engine components
+try:
+    from gtm_autobuild import (
+        AutoBuildItem,
+        AutoBuildOptions,
+        ContainerAutoBuildPlan,
+        GtmAutoBuilder,
+        GtmSafetyGuard,
+        SafetyGateError,
+    )
+except ImportError:
+    # If run directly as script
+    sys.path.insert(0, str(SCRIPT_DIR))
+    from gtm_autobuild import (
+        AutoBuildItem,
+        AutoBuildOptions,
+        ContainerAutoBuildPlan,
+        GtmAutoBuilder,
+        GtmSafetyGuard,
+        SafetyGateError,
+    )
 
 PORTFOLIO_CONTAINERS = [
     {
@@ -37,6 +61,8 @@ PORTFOLIO_CONTAINERS = [
         "public_id": "GTM-P8VTXJ65",
         "primary_url": "https://glintmuse.example.com",
         "expected_ga4_id": "G-EYNX4EGW23",
+        "expected_google_ads_id": "AW-18441790653",
+        "expected_meta_pixel_id": "1509652753054314",
         "requires_ecommerce": True,
         "requires_lead_gen": True,
         "requires_conversion_linker": True,
@@ -52,6 +78,7 @@ PORTFOLIO_CONTAINERS = [
         "public_id": "GTM-5G7SFL9R",
         "primary_url": "https://worldinspirelab.example.com",
         "expected_ga4_id": "G-5QTQX9GL64",
+        "expected_meta_pixel_id": "1150540742401063",
         "requires_ecommerce": True,
         "requires_lead_gen": False,
         "requires_conversion_linker": True,
@@ -67,6 +94,7 @@ PORTFOLIO_CONTAINERS = [
         "public_id": "GTM-T54NBFNJ",
         "primary_url": "https://xinchaovi.example.com",
         "expected_ga4_id": "G-SL1QWKK7EJ",
+        "expected_meta_pixel_id": "1150540742401063",
         "requires_ecommerce": True,
         "requires_lead_gen": False,
         "requires_conversion_linker": False,
@@ -81,7 +109,9 @@ PORTFOLIO_CONTAINERS = [
         "container_id": "256454241",
         "public_id": "GTM-KNXHTL8C",
         "primary_url": "https://carradiocodes.example.co.uk",
-        "expected_ga4_id": None,
+        "expected_ga4_id": "G-BV0Z488B8F",
+        "expected_google_ads_id": "AW-18489631559",
+        "expected_meta_pixel_id": "924116570782999",
         "requires_ecommerce": True,
         "requires_lead_gen": True,
         "requires_conversion_linker": True,
@@ -96,7 +126,8 @@ PORTFOLIO_CONTAINERS = [
         "container_id": "189484691",
         "public_id": "GTM-MSW8GJXP",
         "primary_url": "https://belovedpals.example.com",
-        "expected_ga4_id": None,
+        "expected_ga4_id": "G-1L9JEX0TBN",
+        "expected_meta_pixel_id": "1509652753054314",
         "requires_ecommerce": False,
         "requires_lead_gen": False,
         "requires_conversion_linker": False,
@@ -111,7 +142,8 @@ PORTFOLIO_CONTAINERS = [
         "container_id": "177939808",
         "public_id": "GTM-MKP5HFBS",
         "primary_url": "https://globalgrowthco.com",
-        "expected_ga4_id": None,
+        "expected_ga4_id": "G-LQZEJNSJJH",
+        "expected_meta_pixel_id": "1150540742401063",
         "requires_ecommerce": False,
         "requires_lead_gen": False,
         "requires_conversion_linker": False,
@@ -148,21 +180,90 @@ class ContainerAuditResult:
     tags_summary: List[Dict[str, Any]] = field(default_factory=list)
 
 
-def run_gtm_cli(cmd: str) -> Dict[str, Any]:
-    """Execute raw gtm-agent command and parse JSON output."""
+def safe_json_loads(text: str) -> Any:
+    """Robust JSON extraction handling trailing/leading text notes from CLI output."""
+    text = text.strip()
+    if not text:
+        return {}
     try:
-        proc = subprocess.run(
-            f"gtm-agent raw -- {cmd}",
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if proc.returncode == 0 and proc.stdout.strip():
-            return json.loads(proc.stdout)
-    except Exception as e:
-        return {"error": str(e)}
-    return {}
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start_obj = text.find("{")
+        end_obj = text.rfind("}")
+        start_arr = text.find("[")
+        end_arr = text.rfind("]")
+
+        candidates = []
+        if start_obj != -1 and end_obj != -1 and end_obj > start_obj:
+            candidates.append(text[start_obj : end_obj + 1])
+        if start_arr != -1 and end_arr != -1 and end_arr > start_arr:
+            candidates.append(text[start_arr : end_arr + 1])
+
+        for c in candidates:
+            try:
+                return json.loads(c)
+            except json.JSONDecodeError:
+                continue
+        return {"raw_text": text}
+
+
+def run_gtm_cli(
+    cmd: str,
+    allow_mutation: bool = False,
+    allow_publish: bool = False,
+    confirm: Optional[str] = None,
+    timeout: int = 45,
+    retries: int = 2,
+) -> Dict[str, Any]:
+    """Execute raw gtm-agent command and parse JSON output with safety flags and transient retry."""
+    import time
+
+    flags = []
+    if allow_mutation:
+        flags.append("--allow-mutation")
+    if allow_publish:
+        flags.append("--allow-publish")
+    if confirm:
+        flags.extend(["--confirm", confirm])
+    flag_str = (" " + " ".join(flags)) if flags else ""
+    full_cmd = f"gtm-agent raw{flag_str} -- {cmd}"
+
+    last_error: Dict[str, Any] = {}
+    attempts = retries if not allow_mutation else 0
+
+    for attempt in range(attempts + 1):
+        try:
+            proc = subprocess.run(
+                full_cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            if proc.stdout.strip():
+                parsed = safe_json_loads(proc.stdout)
+                if isinstance(parsed, (dict, list)):
+                    if isinstance(parsed, dict) and "error" in parsed:
+                        last_error = parsed
+                        if attempt < attempts:
+                            time.sleep(1.0 * (attempt + 1))
+                            continue
+                    return parsed
+            if proc.returncode != 0:
+                err_msg = proc.stderr.strip() or f"Command failed with exit code {proc.returncode}"
+                last_error = {"error": err_msg}
+                if attempt < attempts:
+                    time.sleep(1.0 * (attempt + 1))
+                    continue
+                return last_error
+        except Exception as e:
+            last_error = {"error": str(e)}
+            if attempt < attempts:
+                time.sleep(1.0 * (attempt + 1))
+                continue
+            return last_error
+
+    return last_error or {}
 
 
 def probe_public_snippet(url: str, public_id: str) -> bool:
@@ -241,8 +342,11 @@ def audit_container(config: Dict[str, Any], check_snippets: bool = True) -> Cont
             result.lead_conversion_present = True
 
         # Check Meta Pixel
-        if any(kw in t_name.lower() for kw in ["meta pixel", "facebook pixel", "fbq", "meta -"]):
+        if any(kw in t_name.lower() for kw in ["meta pixel", "facebook pixel", "fbq", "meta -", "meta bl", "meta "]):
             result.meta_pixel_present = True
+        elif any("fbq(" in p.get("value", "") for p in t.get("parameter", [])):
+            result.meta_pixel_present = True
+
         # Check Google Ads
         if any(kw in t_name.lower() for kw in ["google ads", "adwords", "aw-"]) or t_type == "awct" or (t_type == "googtag" and "AW-" in t_name):
             result.google_ads_present = True
@@ -298,7 +402,10 @@ def audit_container(config: Dict[str, Any], check_snippets: bool = True) -> Cont
     return result
 
 
-def generate_markdown_report(results: List[ContainerAuditResult]) -> str:
+def generate_markdown_report(
+    results: List[ContainerAuditResult],
+    auto_build_plans: Optional[List[ContainerAutoBuildPlan]] = None,
+) -> str:
     now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     date_str = datetime.date.today().isoformat()
 
@@ -335,6 +442,25 @@ def generate_markdown_report(results: List[ContainerAuditResult]) -> str:
             f"| **{r.brand_name}** | `{r.public_id}` | v{r.live_version_id or '?'} | {r.tag_count} / {r.trigger_count} | {ga4_icon} | {gads_icon} | {meta_icon} | {linker_icon} | {ecomm_icon} | {leads_icon} | {block_icon} | {snip_icon} | **{r.score}%** | {status_icon} |"
         )
 
+    # Auto-Build Execution Ledger if plans were run
+    if auto_build_plans:
+        lines.extend([
+            f"",
+            f"## Automated Self-Healing & Auto-Build Ledger",
+            f"",
+            f"| Brand | Container ID | Status | Actions Planned / Applied | Version Created | Published | Rollback Backup | Score Change |",
+            f"|---|---|---|---|---|---|---|---|",
+        ])
+        for p in auto_build_plans:
+            act_names = ", ".join(a.name for a in p.actions) or "None"
+            ver_text = f"v{p.created_version_id}" if p.created_version_id else "N/A"
+            pub_text = "✅ Yes" if p.status == "published" else ("⚪ Dry Run" if p.status == "dry_run" else "❌ No")
+            bak_text = f"`{Path(p.backup_file).name}`" if p.backup_file else "N/A"
+            score_change = f"{p.post_audit_score}%" if p.post_audit_score is not None else "Pending"
+            lines.append(
+                f"| **{p.brand_name}** | `{p.public_id}` | `{p.status.upper()}` | {act_names} | {ver_text} | {pub_text} | {bak_text} | {score_change} |"
+            )
+
     lines.extend([
         f"",
         f"## Actionable Diagnostics & Findings",
@@ -357,13 +483,46 @@ def generate_markdown_report(results: List[ContainerAuditResult]) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Portfolio GTM & GA4 Weekly Audit Engine")
-    parser.add_argument("--brand", help="Audit specific brand id (e.g. glintmuse)")
+    parser = argparse.ArgumentParser(description="Portfolio GTM & GA4 Weekly Audit & Self-Healing Engine")
+    parser.add_argument("--brand", help="Audit specific brand id (e.g. glintmuse, belovedpals)")
     parser.add_argument("--no-snippets", action="store_true", help="Skip public HTTP snippet probes")
     parser.add_argument("--output", help="Write report to specific markdown path")
     parser.add_argument("--receipt", help="Write JSON execution receipt to specific path")
     parser.add_argument("--json", action="store_true", help="Output JSON result directly to stdout")
-    parser.add_argument("--execute", action="store_true", help="Execute live and write receipts")
+    parser.add_argument("--execute", action="store_true", help="Execute live mutations and write receipts")
+    
+    # Self-Healing & Auto-Build Flags
+    parser.add_argument(
+        "--auto-build",
+        "--auto-fix",
+        dest="auto_build",
+        action="store_true",
+        help="Auto-build missing conversion events, pixels, and tracking tags",
+    )
+    parser.add_argument(
+        "--allow-publish",
+        action="store_true",
+        help="Allow publishing newly created container versions live",
+    )
+    parser.add_argument(
+        "--confirm",
+        help="Container ID confirmation required for publishing (or 'all')",
+    )
+    parser.add_argument(
+        "--allow-legacy-init",
+        action="store_true",
+        help="Allow initializing uninitialized or legacy containers",
+    )
+    parser.add_argument(
+        "--force-workspace",
+        action="store_true",
+        help="Allow using a workspace even if it has pending uncommitted changes",
+    )
+    parser.add_argument(
+        "--backup-dir",
+        help="Directory to save rollback backups (default: backups)",
+    )
+
     args = parser.parse_args()
 
     target_configs = PORTFOLIO_CONTAINERS
@@ -373,12 +532,60 @@ def main() -> int:
             print(f"Error: Unknown brand '{args.brand}'", file=sys.stderr)
             return 1
 
+    # Phase 1: Run Initial Fleet Audit
     results: List[ContainerAuditResult] = []
     for cfg in target_configs:
         res = audit_container(cfg, check_snippets=not args.no_snippets)
         results.append(res)
 
-    md_report = generate_markdown_report(results)
+    auto_build_plans: List[ContainerAutoBuildPlan] = []
+
+    # Phase 2: If --auto-build / --auto-fix requested
+    if args.auto_build:
+        builder = GtmAutoBuilder(run_gtm_cli)
+        backup_dir = Path(args.backup_dir) if args.backup_dir else DEFAULT_BACKUP_DIR
+        opts = AutoBuildOptions(
+            execute=args.execute,
+            allow_publish=args.allow_publish,
+            confirm=args.confirm,
+            allow_legacy_init=args.allow_legacy_init,
+            force_workspace=args.force_workspace,
+            backup_dir=backup_dir,
+        )
+
+        for cfg in target_configs:
+            res = next(r for r in results if r.brand_id == cfg["id"])
+            # If container has issues or score < 100
+            if res.score < 100 or res.issues:
+                v_data = run_gtm_cli(f"versions live --account-id {cfg['account_id']} --container-id {cfg['container_id']} --output json")
+                plan = builder.synthesize_plan(cfg, res, v_data)
+                if plan.actions:
+                    auto_build_plans.append(plan)
+                    if not args.execute:
+                        # Dry run plan
+                        builder.execute_plan(plan, cfg, v_data, opts)
+                    else:
+                        print(f"🔧 Auto-building tracking for {cfg['name']} ({cfg['public_id']})...", file=sys.stderr)
+                        try:
+                            executed_plan = builder.execute_plan(plan, cfg, v_data, opts)
+                            if executed_plan.status == "published":
+                                # Post-publish re-audit to verify live status
+                                re_audit = audit_container(cfg, check_snippets=not args.no_snippets)
+                                executed_plan.post_audit_score = re_audit.score
+                                # Update result in matrix
+                                idx = next(i for i, r in enumerate(results) if r.brand_id == cfg["id"])
+                                results[idx] = re_audit
+                                print(f"✅ Successfully published {cfg['name']} v{executed_plan.created_version_id}! Score: {res.score}% -> {re_audit.score}%", file=sys.stderr)
+                            elif executed_plan.status == "version_created_unpublished":
+                                print(f"ℹ️ Created version {executed_plan.created_version_id} for {cfg['name']} (unpublished). Use --allow-publish --confirm {cfg['container_id']} to go live.", file=sys.stderr)
+                            elif executed_plan.error:
+                                print(f"⚠️ Warning for {cfg['name']}: {executed_plan.error}", file=sys.stderr)
+                        except Exception as e:
+                            plan.status = "error"
+                            plan.error = str(e)
+                            print(f"❌ Auto-build failed for {cfg['name']}: {e}", file=sys.stderr)
+
+    md_report = generate_markdown_report(results, auto_build_plans=auto_build_plans if auto_build_plans else None)
 
     # Determine default paths
     date_str = datetime.date.today().isoformat()
@@ -399,6 +606,7 @@ def main() -> int:
             "healthy_count": sum(1 for r in results if r.score >= 80),
             "avg_score": round(avg_score, 1),
             "results": [asdict(r) for r in results],
+            "auto_build_plans": [asdict(p) for p in auto_build_plans] if auto_build_plans else [],
         }
         receipt_path.write_text(json.dumps(receipt_data, indent=2), encoding="utf-8")
 
@@ -421,12 +629,17 @@ def main() -> int:
             "healthy_count": sum(1 for r in results if r.score >= 80),
             "avg_score": round(avg_score, 1),
             "status": "success" if avg_score >= 70 else "degraded",
+            "auto_build_count": len([p for p in auto_build_plans if p.status == "published"]),
         }
         state_file.write_text(json.dumps(state_data, indent=2), encoding="utf-8")
         success_marker.write_text(f"OK {datetime.datetime.now(datetime.timezone.utc).isoformat()}\n", encoding="utf-8")
 
     if args.json:
-        print(json.dumps([asdict(r) for r in results], indent=2))
+        output_payload = {
+            "results": [asdict(r) for r in results],
+            "auto_build_plans": [asdict(p) for p in auto_build_plans],
+        }
+        print(json.dumps(output_payload, indent=2))
     else:
         print(md_report)
 

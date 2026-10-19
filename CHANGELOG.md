@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Added Automated Tracking Self-Healing & Auto-Build Engine (`gtm_autobuild.py`)**:
+  - Implemented multi-resource automated plan synthesis covering GA4 Google Tags (`googtag` with nested parameter schema invariant), Conversion Linker (`gclidw`), E-Commerce event forwarders (`gaawe` bound to Custom Event regex trigger with `getEcommerceDataFrom: dataLayer` and `measurementIdOverride`), Lead generation forwarders (`generate_lead` with `measurementIdOverride`), Meta Pixel base code (`html` with fbq integration), Google Ads base Google Tag, and conversion-critical blocking triggers (`(cart|checkout|order-received|thank-you|receipt)`).
+  - Built comprehensive safety gates: uninitialized container mutation refusal (`--allow-legacy-init`) with explicit API error discrimination, idempotency checks against existing live/workspace tags and triggers (normalizing customEvent filters and reusing existing trigger IDs), workspace isolation (`AutoFix-*` or verified clean workspace), automated pre-mutation live container rollback backup (`backups/{date}-{public_id}-v{version}-before-autofix.json`), and double-gated publishing (`--allow-publish --confirm <container-id>`).
+  - Hardened execution resilience: strict error checking on every mutation step (aborts immediately before creating container version if any tag/trigger/variable creation fails), robust publish response verification (rejects false "published" statuses on API error), and zero-action skip guard.
+  - Added transient retry with backoff in `portfolio_gtm_audit.py` to protect against CLI/Deno process socket timeouts during multi-container sequential sweeps.
+  - Added unified Python CLI entrypoint `skills/gtm-agent/scripts/gtm_agent.py` (`python3 scripts/gtm_agent.py --help`, `audit`, `autobuild`, `raw`).
+  - Integrated `--auto-build` / `--auto-fix` into `portfolio_gtm_audit.py` supporting dry-run inspection, live execution, post-publish verification, and an automated Self-Healing Ledger in markdown reports.
+  - Automatically resolved and deployed BelovedPals (`GTM-MSW8GJXP`) GA4 Google Tag (`G-1L9JEX0TBN`) to live version 11, elevating portfolio tracking health to **100% (6/6 brands PASS)**.
+  - Added test suite `skills/gtm-agent/tests/test_autobuild.py` covering plan generation, schema invariants, idempotency deduplication, safety gates, rollback backups, dry-run mode, mutation error halts, and publish confirmation.
 - Added `portfolio_gtm_audit.py` with multi-brand tracking matrix, automated live container auditing for GA4, Google Ads, Meta Pixel, Conversion Linker, Ecommerce, and Leads, with automated state and receipt writeback for `CAD-20261019-portfolio-gtm-ga4-weekly-audit`.
 - Fixed Conversion Linker cross-domain parameter hygiene in Container `GTM-5G7SFL9R` (Version 25): pruned self-referencing root domain `example.com` and subdomains from `linkerDomains`, restricting cross-domain tracking strictly to verified external destinations (`zylvie.com, buildfast.fyi`) to eliminate unwanted `_gl` URL decorations.
 - Sanitized local machine absolute paths in README and SKILL documentation; added private file rules to .gitignore.

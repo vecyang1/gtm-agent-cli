@@ -331,6 +331,34 @@ the workspace delta rather than the workspace's stale view. Read the live versio
 (or `workspaces sync`) before treating any workspace listing as the container's
 current state or as a duplicate check.
 
+## Automated Self-Healing & Tracking Auto-Build Engine
+
+When conversion events, marketing pixels, or attribution linkers are missing or degraded across the portfolio:
+
+- **Unified Python Front Door**:
+  ```bash
+  python3 skills/gtm-agent/scripts/gtm_agent.py --help
+  python3 skills/gtm-agent/scripts/gtm_agent.py audit
+  python3 skills/gtm-agent/scripts/gtm_agent.py autobuild --brand <brand>
+  ```
+- **Weekly Cadence & Diagnostic Engine**: `skills/gtm-agent/scripts/portfolio_gtm_audit.py` performs multi-brand compliance sweeps across GA4, Google Ads, Meta Pixel, Conversion Linker, Ecommerce forwarding, and blocking triggers with automatic CLI socket retry backoff.
+- **Dry-Run Inspection First**:
+  ```bash
+  python3 skills/gtm-agent/scripts/portfolio_gtm_audit.py --auto-build
+  ```
+  Generates declarative repair plans for missing resources with zero mutation.
+- **Safety-Gated Live Execution & Publish**:
+  ```bash
+  python3 skills/gtm-agent/scripts/portfolio_gtm_audit.py --auto-build --execute --allow-publish --confirm <container-id>
+  ```
+- **Invariants & Safety Gates**:
+  1. **Rollback Backup Readiness**: Captures full JSON backup of the live version into `backups/` before any workspace mutation.
+  2. **Workspace Isolation**: Creates a dedicated `AutoFix-*` workspace or validates that the selected workspace has 0 uncommitted changes.
+  3. **Idempotency Guard**: Skips creation if an equivalent tag, trigger, or variable already exists in the live version or workspace; normalizes Custom Event filter regex and reuses existing trigger IDs.
+  4. **Uninitialized Protection & Error Discrimination**: Refuses mutation of uninitialized containers without explicit `--allow-legacy-init`, while properly rejecting live version API fetch errors.
+  5. **Strict Execution & Publish Gating**: Aborts immediately before version creation if any tag, trigger, or variable mutation fails; verifies publish response and logs rollback commands on error; skips execution cleanly if no actions are needed.
+  6. **Post-Publish Verification**: Immediately re-audits the container and asserts score improvement before writing the execution receipt.
+
 ## Verification
 
 From the repo:
@@ -338,6 +366,7 @@ From the repo:
 ```bash
 python3 skills/gtm-agent/tests/test_contract.py
 python3 skills/gtm-agent/tests/test_account_admin_check.py
+python3 skills/gtm-agent/tests/test_autobuild.py
 go test ./...
 go vet ./...
 ./scripts/e2e-fake-gtm.sh
@@ -346,3 +375,4 @@ go vet ./...
 ## References
 
 - [Google Ads API Integration & Tooling Reference](references/google_ads_api_integration.md) (Developer Token requirements and comparison of Composio vs. google-ads-open-cli)
+

@@ -42,3 +42,5 @@ graphify-out/
 .agent/
 .claude/
 .pytest_cache/
+.run/
+*.uploading.cfg

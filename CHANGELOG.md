@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added `portfolio_gtm_audit.py` with multi-brand tracking matrix, automated live container auditing for GA4, Google Ads, Meta Pixel, Conversion Linker, Ecommerce, and Leads, with automated state and receipt writeback for `CAD-20261019-portfolio-gtm-ga4-weekly-audit`.
 - Fixed Conversion Linker cross-domain parameter hygiene in Container `GTM-5G7SFL9R` (Version 25): pruned self-referencing root domain `example.com` and subdomains from `linkerDomains`, restricting cross-domain tracking strictly to verified external destinations (`zylvie.com, buildfast.fyi`) to eliminate unwanted `_gl` URL decorations.
 - Sanitized local machine absolute paths in README and SKILL documentation; added private file rules to .gitignore.
 
@@ -47,6 +48,11 @@
   receipt/reconciliation and no-backfill rules. It is now the required
   deployment/audit gate for every WordPress + SureCart site in that ownership
   mode. Documentation only; no CLI behavior changed.
+
+## [2026-10-19] - 2026-10-19
+
+### Maintenance
+- Enforce GitHub Actions quota hygiene (ubuntu-latest default, concurrency, paths-ignore) (`1d32485`)
 
 ## [2026-10-04] - 2026-10-04
 

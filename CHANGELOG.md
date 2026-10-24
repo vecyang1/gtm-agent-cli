@@ -58,6 +58,19 @@
   deployment/audit gate for every WordPress + SureCart site in that ownership
   mode. Documentation only; no CLI behavior changed.
 
+## [2026-10-25] - 2026-10-25
+
+### Automated Cadence
+- Executed weekly Portfolio GTM & GA4 Tracking & Conversion Audit (`CAD-20261019-portfolio-gtm-ga4-weekly-audit`).
+- Verified 6/6 portfolio containers at 100% health with live HTTP snippet detection across all brands.
+- Recorded live version advance on Global Growth Co (`GTM-MKP5HFBS` v9 -> v10) with zero tracking drift.
+
+## [2026-10-22] - 2026-10-22
+
+### Documentation
+- Document GA4 tag schema invariants and choosing the rung analysis (`0d98ccb`)
+- Record 100% compliant portfolio audit ledger and run receipts (`494b115`)
+
 ## [2026-10-19] - 2026-10-19
 
 ### Maintenance

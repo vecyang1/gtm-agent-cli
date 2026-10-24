@@ -44,3 +44,8 @@ graphify-out/
 .pytest_cache/
 .run/
 *.uploading.cfg
+
+# Local cadence reports & private containers
+skills/gtm-agent/reports/
+skills/gtm-agent/config/
+*.local.json

@@ -52,107 +52,62 @@ except ImportError:
         SafetyGateError,
     )
 
-PORTFOLIO_CONTAINERS = [
-    {
-        "id": "glintmuse",
-        "name": "GlintMuse",
-        "account_id": "6339218068",
-        "container_id": "243541856",
-        "public_id": "GTM-P8VTXJ65",
-        "primary_url": "https://glintmuse.example.com",
-        "expected_ga4_id": "G-EYNX4EGW23",
-        "expected_google_ads_id": "AW-18441790653",
-        "expected_meta_pixel_id": "1509652753054314",
-        "requires_ecommerce": True,
-        "requires_lead_gen": True,
-        "requires_conversion_linker": True,
-        "requires_blocking_triggers": True,
-        "requires_meta_pixel": True,
-        "requires_google_ads": True,
-    },
-    {
-        "id": "worldinspirelab",
-        "name": "World Inspire Lab",
-        "account_id": "6192716090",
-        "container_id": "164006082",
-        "public_id": "GTM-5G7SFL9R",
-        "primary_url": "https://worldinspirelab.example.com",
-        "expected_ga4_id": "G-5QTQX9GL64",
-        "expected_meta_pixel_id": "1150540742401063",
-        "requires_ecommerce": True,
-        "requires_lead_gen": False,
-        "requires_conversion_linker": True,
-        "requires_blocking_triggers": True,
-        "requires_meta_pixel": True,
-        "requires_google_ads": False,
-    },
-    {
-        "id": "xinchaovi",
-        "name": "XinChaoVi",
-        "account_id": "6306410723",
-        "container_id": "226299748",
-        "public_id": "GTM-T54NBFNJ",
-        "primary_url": "https://xinchaovi.example.com",
-        "expected_ga4_id": "G-SL1QWKK7EJ",
-        "expected_meta_pixel_id": "1150540742401063",
-        "requires_ecommerce": True,
-        "requires_lead_gen": False,
-        "requires_conversion_linker": False,
-        "requires_blocking_triggers": True,
-        "requires_meta_pixel": True,
-        "requires_google_ads": False,
-    },
-    {
-        "id": "onlineradiocode",
-        "name": "Online Radio Codes",
-        "account_id": "6362655900",
-        "container_id": "256454241",
-        "public_id": "GTM-KNXHTL8C",
-        "primary_url": "https://carradiocodes.example.co.uk",
-        "expected_ga4_id": "G-BV0Z488B8F",
-        "expected_google_ads_id": "AW-18489631559",
-        "expected_meta_pixel_id": "924116570782999",
-        "requires_ecommerce": True,
-        "requires_lead_gen": True,
-        "requires_conversion_linker": True,
-        "requires_blocking_triggers": False,
-        "requires_meta_pixel": False,
-        "requires_google_ads": True,
-    },
-    {
-        "id": "belovedpals",
-        "name": "BelovedPals",
-        "account_id": "6238828702",
-        "container_id": "189484691",
-        "public_id": "GTM-MSW8GJXP",
-        "primary_url": "https://belovedpals.example.com",
-        "expected_ga4_id": "G-1L9JEX0TBN",
-        "expected_meta_pixel_id": "1509652753054314",
-        "requires_ecommerce": False,
-        "requires_lead_gen": False,
-        "requires_conversion_linker": False,
-        "requires_blocking_triggers": True,
-        "requires_meta_pixel": False,
-        "requires_google_ads": False,
-    },
-    {
-        "id": "globalgrowthco",
-        "name": "Global Growth Co",
-        "account_id": "6217978188",
-        "container_id": "177939808",
-        "public_id": "GTM-MKP5HFBS",
-        "primary_url": "https://globalgrowthco.com",
-        "expected_ga4_id": "G-LQZEJNSJJH",
-        "expected_meta_pixel_id": "1150540742401063",
-        "requires_ecommerce": False,
-        "requires_lead_gen": False,
-        "requires_conversion_linker": False,
-        "requires_blocking_triggers": False,
-        "requires_meta_pixel": False,
-        "requires_google_ads": False,
-    },
-]
+def _load_portfolio_containers() -> List[Dict[str, Any]]:
+    config_env = os.environ.get("GTM_PORTFOLIO_CONFIG")
+    candidates = [
+        Path(config_env) if config_env else None,
+        SKILL_DIR / "config" / "containers.local.json",
+        SCRIPT_DIR / "containers.local.json",
+        SKILL_DIR / "config" / "containers.json",
+    ]
+    for c in candidates:
+        if c and c.exists():
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list) and len(data) > 0:
+                        return data
+            except Exception:
+                pass
 
+    return [
+        {
+            "id": "sample-ecommerce",
+            "name": "Sample E-commerce",
+            "account_id": "123456789",
+            "container_id": "987654321",
+            "public_id": "GTM-SAMPLE01",
+            "primary_url": "https://store.example.com",
+            "expected_ga4_id": "G-SAMPLE01",
+            "expected_google_ads_id": "AW-SAMPLE01",
+            "expected_meta_pixel_id": "SAMPLE01",
+            "requires_ecommerce": True,
+            "requires_lead_gen": True,
+            "requires_conversion_linker": True,
+            "requires_blocking_triggers": True,
+            "requires_meta_pixel": True,
+            "requires_google_ads": True,
+        },
+        {
+            "id": "sample-leads",
+            "name": "Sample Lead Gen",
+            "account_id": "123456789",
+            "container_id": "987654322",
+            "public_id": "GTM-SAMPLE02",
+            "primary_url": "https://leads.example.com",
+            "expected_ga4_id": "G-SAMPLE02",
+            "expected_google_ads_id": "AW-SAMPLE02",
+            "expected_meta_pixel_id": "SAMPLE02",
+            "requires_ecommerce": False,
+            "requires_lead_gen": True,
+            "requires_conversion_linker": True,
+            "requires_blocking_triggers": False,
+            "requires_meta_pixel": False,
+            "requires_google_ads": False,
+        },
+    ]
+
+PORTFOLIO_CONTAINERS = _load_portfolio_containers()
 
 @dataclass
 class ContainerAuditResult:

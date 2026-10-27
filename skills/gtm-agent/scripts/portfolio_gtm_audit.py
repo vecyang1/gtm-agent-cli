@@ -19,12 +19,14 @@ import argparse
 import datetime
 import json
 import os
+import re
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
@@ -109,6 +111,79 @@ def _load_portfolio_containers() -> List[Dict[str, Any]]:
 
 PORTFOLIO_CONTAINERS = _load_portfolio_containers()
 
+# Web Supply Chain & External Script Watchlists
+HIJACKED_OR_DEPRECATED_DOMAINS: Set[str] = {
+    "cdn.taku-app.com",
+    "taku-app.com",
+}
+
+APPROVED_VENDOR_DOMAINS: Set[str] = {
+    "googletagmanager.com",
+    "google-analytics.com",
+    "googleadservices.com",
+    "google.com",
+    "clarity.ms",
+    "connect.facebook.net",
+    "facebook.com",
+    "cdn.taku.cool",
+    "scripts.claspo.io",
+    "cdnjs.cloudflare.com",
+    "plugin.nytsys.com",
+    "plugin-api-4.nytroseo.com",
+    "resources-app.encharge.io",
+    "visitor.leadsourcing.co",
+    "widget.cxgenie.ai",
+    "app.visitortracking.com",
+    "zylvie.com",
+    "analytics.tiktok.com",
+    "ct.pinterest.com",
+    "snap.licdn.com",
+    "licdn.com",
+    "app.chaport.com",
+    "cdn.growify.ai",
+    "cdn.nuwtonic.com",
+    "worldinspirelab.com",
+    "glintmuse.com",
+    "belovedpals.com",
+    "globalgrowthco.com",
+    "xinchaovi.com",
+}
+
+
+def extract_domains_from_html(html_str: str) -> List[str]:
+    """Extracts all external hostnames from script tags and URLs in HTML/JS snippet."""
+    domains = set()
+    # 1. <script src="...">
+    src_matches = re.findall(r'<script[^>]+src=[\'"]([^\'"]+)[\'"]', html_str, re.IGNORECASE)
+    for src in src_matches:
+        src = src.strip()
+        if src.startswith("//"):
+            src = "https:" + src
+        try:
+            parsed = urllib.parse.urlparse(src)
+            if parsed.netloc:
+                domains.add(parsed.netloc.lower())
+        except Exception:
+            pass
+
+    # 2. String literal URLs in inline JS (e.g. .src = "https://...")
+    url_matches = re.findall(r'https?://[a-zA-Z0-9\-\.]+(?::[0-9]+)?', html_str)
+    for u in url_matches:
+        try:
+            parsed = urllib.parse.urlparse(u)
+            if parsed.netloc:
+                domains.add(parsed.netloc.lower())
+        except Exception:
+            pass
+
+    # 3. Protocol-relative URLs (//visitor.leadsourcing.co/...)
+    proto_rel = re.findall(r'//([a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,})', html_str)
+    for h in proto_rel:
+        domains.add(h.lower())
+
+    return sorted(list(domains))
+
+
 @dataclass
 class ContainerAuditResult:
     brand_id: str
@@ -133,6 +208,8 @@ class ContainerAuditResult:
     score: int = 100
     issues: List[str] = field(default_factory=list)
     tags_summary: List[Dict[str, Any]] = field(default_factory=list)
+    third_party_scripts: List[Dict[str, Any]] = field(default_factory=list)
+    hijacked_domains_found: List[str] = field(default_factory=list)
 
 
 def safe_json_loads(text: str) -> Any:
@@ -291,7 +368,7 @@ def audit_container(config: Dict[str, Any], check_snippets: bool = True) -> Cont
             result.ga4_configured = True
         if t_type == "gclidw":
             result.conversion_linker_present = True
-        if "ecommerce" in t_name.lower() or "purchase" in t_name.lower():
+        if "ecommerce" in t_name.lower() or "e-commerce" in t_name.lower() or "purchase" in t_name.lower():
             result.ecommerce_forwarding_present = True
         if "lead" in t_name.lower() or "generate_lead" in t_name.lower():
             result.lead_conversion_present = True
@@ -305,6 +382,44 @@ def audit_container(config: Dict[str, Any], check_snippets: bool = True) -> Cont
         # Check Google Ads
         if any(kw in t_name.lower() for kw in ["google ads", "adwords", "aw-"]) or t_type == "awct" or (t_type == "googtag" and "AW-" in t_name):
             result.google_ads_present = True
+
+        # Check Third-Party Script Domains & Supply Chain Safety
+        extracted_domains = []
+        if t_type == "html":
+            for p in t.get("parameter", []):
+                if p.get("key") == "html" and p.get("value"):
+                    extracted_domains = extract_domains_from_html(p.get("value"))
+        elif t_type == "cvt_MQDKZ":
+            extracted_domains = ["clarity.ms"]
+        elif t_type == "bzi":
+            extracted_domains = ["snap.licdn.com"]
+        elif t_type in ("googtag", "gaawe", "gclidw", "awct"):
+            extracted_domains = ["googletagmanager.com"]
+
+        if extracted_domains:
+            # Check for hijacked / deprecated domains
+            hijacked_hits = [d for d in extracted_domains if any(bad in d for bad in HIJACKED_OR_DEPRECATED_DOMAINS)]
+            if hijacked_hits:
+                verdict = "CRITICAL_HIJACKED"
+                for bad in hijacked_hits:
+                    result.hijacked_domains_found.append(f"{bad} in tag '{t_name}'")
+                    result.issues.append(f"CRITICAL: Hijacked/abandoned domain detected in tag '{t_name}': {bad}!")
+                result.score -= 50
+            elif all(any(d == app or d.endswith("." + app) for app in APPROVED_VENDOR_DOMAINS) for d in extracted_domains):
+                verdict = "SAFE_PARTNER"
+            else:
+                verdict = "UNVERIFIED"
+                unverified = [d for d in extracted_domains if not any(d == app or d.endswith("." + app) for app in APPROVED_VENDOR_DOMAINS)]
+                result.issues.append(f"WARN: Unverified external domain(s) in tag '{t_name}': {', '.join(unverified)}")
+
+            result.third_party_scripts.append({
+                "tag_id": str(t.get("tagId", "")),
+                "name": t_name,
+                "type": t_type,
+                "paused": bool(t.get("paused", False)),
+                "domains": extracted_domains,
+                "verdict": verdict,
+            })
 
     # Check Blocking Triggers
     blocking_triggers = [
@@ -415,6 +530,37 @@ def generate_markdown_report(
             lines.append(
                 f"| **{p.brand_name}** | `{p.public_id}` | `{p.status.upper()}` | {act_names} | {ver_text} | {pub_text} | {bak_text} | {score_change} |"
             )
+
+    # Web Supply Chain & Third-Party Script Security Section
+    lines.extend([
+        f"",
+        f"## Web Supply Chain & External Script Security Audit (供应链与第三方脚本安全排查)",
+        f"",
+        f"| Brand | Tag Name | Type | Status | Extracted Domains | Security Verdict |",
+        f"|---|---|---|---|---|---|",
+    ])
+    total_scripts = 0
+    total_hijacked = 0
+    for r in results:
+        for s in r.third_party_scripts:
+            total_scripts += 1
+            status_badge = "⏸️ PAUSED" if s.get("paused") else "▶️ ACTIVE"
+            if s.get("verdict") == "CRITICAL_HIJACKED":
+                total_hijacked += 1
+                v_badge = "🔴 CRITICAL_HIJACKED"
+            elif s.get("verdict") == "SAFE_PARTNER":
+                v_badge = "🟢 SAFE_PARTNER"
+            else:
+                v_badge = "🟡 UNVERIFIED"
+            domains_str = ", ".join(f"`{d}`" for d in s.get("domains", [])) or "None"
+            lines.append(
+                f"| **{r.brand_name}** | {s.get('name')} | `{s.get('type')}` | {status_badge} | {domains_str} | {v_badge} |"
+            )
+
+    if total_hijacked == 0:
+        lines.append(f"\n> 🛡️ **Supply Chain Safety Gate**: 0 hijacked/deprecated domains found across {total_scripts} tracked script configurations.\n")
+    else:
+        lines.append(f"\n> ⚠️ **Supply Chain Alert**: Found {total_hijacked} hijacked/deprecated domain instances requiring immediate remediation!\n")
 
     lines.extend([
         f"",

@@ -233,12 +233,26 @@ class GtmAutoBuilder:
         # 2. Missing Conversion Linker
         if config.get("requires_conversion_linker") and not getattr(audit_result, "conversion_linker_present", False):
             plan.missing_items.append("Conversion Linker (gclidw)")
+            linker_config = {}
+            linker_domains = config.get("linker_domains")
+            if linker_domains:
+                linker_config = {
+                    "parameter": [
+                        {"type": "boolean", "key": "enableCrossDomain", "value": "true"},
+                        {"type": "boolean", "key": "enableUrlPassthrough", "value": "false"},
+                        {"type": "boolean", "key": "acceptIncoming", "value": "true"},
+                        {"type": "template", "key": "linkerDomains", "value": linker_domains},
+                        {"type": "boolean", "key": "formDecoration", "value": "false"},
+                        {"type": "template", "key": "urlPosition", "value": "query"},
+                        {"type": "boolean", "key": "enableCookieOverrides", "value": "false"},
+                    ]
+                }
             item = AutoBuildItem(
                 kind="tag",
                 name="Google Ads - Conversion Linker",
                 type="gclidw",
                 firing_trigger_ref="2147479553",
-                config={},
+                config=linker_config,
                 reason="Deploy Conversion Linker for paid ads click attribution",
             )
             dup, _ = GtmSafetyGuard.check_idempotency(item, existing_tags, existing_triggers, existing_variables)

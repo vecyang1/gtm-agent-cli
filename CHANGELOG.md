@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0] - 2026-10-27
+
+### Added
+- **Web Supply Chain & Third-Party Script Security Engine (`portfolio_gtm_audit.py`)**:
+  - `extract_domains_from_html()`: parses Custom HTML tags for `<script src="...">`, inline string URLs, and protocol-relative endpoints.
+  - `HIJACKED_OR_DEPRECATED_DOMAINS` Watchlist: gatekeeper blocking abandoned or hijacked vendor CDNs (e.g. `cdn.taku-app.com`, `taku-app.com`).
+  - `APPROVED_VENDOR_DOMAINS` Catalog: whitelist verifying trusted tracking, analytics, and CRM vendors across Google, Meta, Clarity, Claspo, Taku, Encharge, NetroSEO, Leadsourcing, VisitorTracking, CX Genie, Chaport, Growify, and Nuwtonic.
+  - **Tag Pause State Visibility**: audits and reports whether third-party tags are actively firing (`▶️ ACTIVE`) or safely paused/dormant (`⏸️ PAUSED`), honoring the invariant that deprecated scripts should be paused in GTM rather than duplicated to CMS drafts.
+  - **Single Source of Truth (SSOT) Invariant**: documented and enforced rule that all third-party scripts reside in GTM as independent tags, eliminating double-firing hazards from WPCode/Divi drafts.
+  - **Markdown Report & JSON Matrix Enhancement**: generates the `## Web Supply Chain & External Script Security Audit` matrix across all 6 portfolio brands in `reports/runs/gtm-portfolio-audit.md`.
+- **Unit Test Coverage (`tests/test_supply_chain_audit.py`)**:
+  - Added 5 new unit tests (33/33 total passing in test suite) validating domain extraction from `<script src="...">`, inline DOM injection strings, protocol-relative URLs, hijacked domain flagging, and partner whitelist categorization.
+
 ## Unreleased
 
 - **Added Automated Tracking Self-Healing & Auto-Build Engine (`gtm_autobuild.py`)**:

@@ -371,6 +371,22 @@ When conversion events, marketing pixels, or attribution linkers are missing or 
   - Publishing API response must be verified before claiming `published`; on publish error, status becomes `error` and explicit rollback instructions are printed.
   - Empty action plans (`plan.actions == []`) return `skipped` immediately without allocating workspaces or creating empty versions.
 
+### Web Supply Chain & Third-Party Script Security Audit (Ref: `skill-creator` § Choosing the Rung)
+
+- **Single Source of Truth (SSOT) & Zero CMS Duplication Invariant**:
+  - All client-side marketing, tracking, vendor widgets, and analytics scripts MUST live exclusively in GTM as independent, individual tags.
+  - **Never create "backup" or "paused" draft snippets in WordPress/CMS (e.g. WPCode Pro, Divi Integration Head, theme `header.php`)**. Leaving disabled or archived scripts in CMS settings risks future operators inadvertently activating them, causing silent double-firing, race conditions, and split attribution.
+  - The CMS header integration must strictly contain the single authoritative GTM container loader (`GTM-XXXXXXX`).
+- **Safe Tag Pause Protocol (`paused: true`)**:
+  - Unused, legacy, or decommissioned third-party tags should be set to `paused: true` directly within GTM (`gtm-cli tags update --tag-id <id> ...`), rather than permanently deleted or relocated to external drafts.
+  - **Preserved History & Instant Recovery**: Pausing in GTM keeps all historical configurations, trigger definitions, vendor account IDs, and version commit notes completely intact and searchable. If an agency or marketing lead needs to re-enable a vendor, an operator toggles pause off in one click.
+  - **Zero Browser Runtime Risk**: GTM's production compiler (`gtm.js`) physically strips paused tags from the deployed JavaScript payload. Visitors' browsers experience zero network overhead, zero execution latency, and zero supply-chain risk.
+- **Deprecated / Abandoned Domain Gatekeeper (`portfolio_gtm_audit.py`)**:
+  - Weekly sweeps automatically extract external `<script src="...">` and inline endpoint domains across all Custom HTML tags via `extract_domains_from_html()`.
+  - Audits cross-check extracted domains against `HIJACKED_OR_DEPRECATED_DOMAINS` (abandoned domains subject to drop-catching hijack, e.g. `cdn.taku-app.com`, `taku-app.com`) and categorize trusted platforms under `APPROVED_VENDOR_DOMAINS`.
+  - Flags active tags referencing blacklisted domains with an immediate exit code failure (`🚨 CRITICAL SECURITY ALERT`) and renders real-time tag execution states (`▶️ ACTIVE` vs `⏸️ PAUSED`) in weekly compliance ledgers.
+  - *Choosing the Rung*: Why hardened into `portfolio_gtm_audit.py` (Rung 3) and `test_supply_chain_audit.py` (Rung 4): Third-party vendor domain abandonment or hijacking silently takes over client browsers without console errors (**silent failure**), threatens every web property embedding the vendor script (**repeated cost**), and domain matching against known blacklists is completely deterministic (**decidable predicate**).
+
 ## Verification
 
 From the repo:
@@ -379,6 +395,8 @@ From the repo:
 python3 skills/gtm-agent/tests/test_contract.py
 python3 skills/gtm-agent/tests/test_account_admin_check.py
 python3 skills/gtm-agent/tests/test_autobuild.py
+python3 skills/gtm-agent/tests/test_supply_chain_audit.py
+python3 -m unittest discover -s skills/gtm-agent/tests -p "test_*.py"
 go test ./...
 go vet ./...
 ./scripts/e2e-fake-gtm.sh

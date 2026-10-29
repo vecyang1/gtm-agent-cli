@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0] - 2026-10-29
+
+### Added
+- **Surface gating audit (`portfolio_gtm_audit.py`)**: `evaluate_surface_gating()` decides, from the live container version alone, whether every active site-wide tag (All Pages / Initialization / Consent Init) carries an all-event blocker that tests the page-surface classifier, and whether every promo overlay (`PROMO_OVERLAY_DOMAINS`: Claspo, Taku) is allow-listed to the storefront. It flags Page View blockers on Initialization-fired tags and a missing classifier variable, and reports `site-wide gated n/N` and `promo allow-listed n/N`. Opt in per container with `"surface_gating": {"classifier_variable": "..."}`. New `Surface` column and section in the ledger.
+- `tests/test_surface_gating.py` (7 tests, fixtures from the live GlintMuse v29 shapes; mutation-checked).
+- `plans/glintmuse_surface_gating.yaml`: reference classifier variable and blocker triggers.
+
+### Fixed
+- SKILL.md publish rule: `--confirm` belongs to the wrapper before `--`; upstream gtm-cli 1.5.8 rejects it after `--` with exit 2.
+
+### Live change (GTM-P8VTXJ65)
+- v28 + v29: `CJS - Page Surface` (56), `Block - Non-Customer Surface (all events)` (57) on GA4, Clarity, Conversion Linker, Meta Pixel, Ads tag, Growify, Chatwoot, Nuwtonic; `Block - Promo Overlay Off Storefront (all events)` (58) on Claspo and Taku. Cause: Cloudflare Google tag gateway auto-placement injected the container on every proxied glintmuse.com host, so Claspo showed on status.glintmuse.com and over SiteGround's bot challenge. Rollback: republish v27 (backup `backups/glintmuse-v27-before-surface-gating-20261029.backup.json`).
+
 ## [1.3.0] - 2026-10-27
 
 ### Added

@@ -1,0 +1,93 @@
+# GlintMuse surface gating (2026-10-29).
+# Cloudflare Google tag gateway (setUpTag) injects GTM-P8VTXJ65 into EVERY proxied
+# glintmuse.com host -- status page, research pages, Access-gated dashboards --
+# and Cloudflare cannot scope it per hostname. So the container decides where
+# tags may run. One classifier variable, two all-event blocking triggers:
+#   - promo overlays (Claspo, Taku) run only on a top-level storefront page
+#   - marketing/analytics/chat tags never run on internal hosts, edge/system pages
+#     (SiteGround bot challenge) or WP editor/preview
+# Step 2 (attach blockers to existing tags) uses `tags update`, which the
+# declarative layer does not expose; see skills/gtm-agent/SKILL.md § Surface Gating.
+# Live: v28 (variable 56, triggers 57/58), v29 added the `system` class.
+accountId: "6339218068"
+containerId: "243541856"
+workspaceId: "30"
+actions:
+  - kind: createVariable
+    name: "CJS - Page Surface"
+    type: "jsm"
+    notes: "internal | system | editor | storefront | storefront_framed | customer_app | customer_app_framed"
+    config:
+      parameter:
+        - type: template
+          key: javascript
+          value: |
+            function() {
+              // Single owner of "which surface is this page?". The CF tag gateway
+              // injects this container on every glintmuse.com host, so tags gate here.
+              var host = (location.hostname || '').toLowerCase();
+              var surface;
+              if (/^(www\.)?glintmuse\.com$/.test(host)) { surface = 'storefront'; }
+              else if (host === 'diagnose.glintmuse.com') { surface = 'customer_app'; }
+              else { return 'internal'; }
+              var path = location.pathname || '';
+              var query = location.search || '';
+              // SiteGround bot challenge (/.well-known/captcha/) and edge pages.
+              if (/^\/(\.well-known|cdn-cgi)\//.test(path)) { return 'system'; }
+              if (/^\/(wp-admin|wp-login\.php)/.test(path) ||
+                  /[?&](et_fb|preview|customize_changeset_uuid|elementor-preview|fl_builder|ct_builder)=/.test(query)) {
+                return 'editor';
+              }
+              var framed;
+              try { framed = window.top !== window.self; } catch (e) { framed = true; }
+              return framed ? surface + '_framed' : surface;
+            }
+  - kind: createTrigger
+    name: "Block - Non-Customer Surface (all events)"
+    type: "customEvent"
+    notes: "Blocks on gtm.init and gtm.js alike, so Initialization-fired Google tags are covered too."
+    config:
+      customEventFilter:
+        - type: matchRegex
+          parameter:
+            - type: template
+              key: arg0
+              value: "{{_event}}"
+            - type: template
+              key: arg1
+              value: ".*"
+      filter:
+        - type: matchRegex
+          parameter:
+            - type: template
+              key: arg0
+              value: "{{CJS - Page Surface}}"
+            - type: template
+              key: arg1
+              value: "^(internal|system|editor)$"
+  - kind: createTrigger
+    name: "Block - Promo Overlay Off Storefront (all events)"
+    type: "customEvent"
+    notes: "Anything but a top-level storefront page: internal, editor, framed, quiz app."
+    config:
+      customEventFilter:
+        - type: matchRegex
+          parameter:
+            - type: template
+              key: arg0
+              value: "{{_event}}"
+            - type: template
+              key: arg1
+              value: ".*"
+      filter:
+        - type: equals
+          parameter:
+            - type: template
+              key: arg0
+              value: "{{CJS - Page Surface}}"
+            - type: template
+              key: arg1
+              value: "storefront"
+            - type: boolean
+              key: negate
+              value: "true"

@@ -149,6 +149,19 @@ APPROVED_VENDOR_DOMAINS: Set[str] = {
     "xinchaovi.com",
 }
 
+# Surface gating: vendors whose tag draws a promotional overlay (popup, countdown
+# badge, announcement bar). These must only render on a top-level storefront page.
+PROMO_OVERLAY_DOMAINS: Set[str] = {
+    "claspo.io",
+    "taku.cool",
+}
+
+# Built-in GTM triggers that fire on every page: All Pages, Initialization - All
+# Pages, Consent Initialization - All Pages.
+SITE_WIDE_TRIGGER_IDS: Set[str] = {"2147479553", "2147479573", "2147479572"}
+INIT_TRIGGER_IDS: Set[str] = {"2147479573", "2147479572"}
+ALL_EVENT_REGEXES: Set[str] = {".*", "^.*$", ".+", "^.+$"}
+
 
 def extract_domains_from_html(html_str: str) -> List[str]:
     """Extracts all external hostnames from script tags and URLs in HTML/JS snippet."""
@@ -184,6 +197,123 @@ def extract_domains_from_html(html_str: str) -> List[str]:
     return sorted(list(domains))
 
 
+def _param(cond: Dict[str, Any], key: str) -> str:
+    for p in cond.get("parameter", []):
+        if p.get("key") == key:
+            return str(p.get("value", ""))
+    return ""
+
+
+def _conditions(trigger: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return list(trigger.get("filter") or []) + list(trigger.get("autoEventFilter") or [])
+
+
+def _references(cond: Dict[str, Any], variable_ref: str) -> bool:
+    return variable_ref in _param(cond, "arg0")
+
+
+def _is_all_event_trigger(trigger: Dict[str, Any]) -> bool:
+    """A Custom Event trigger matching every event also fires on gtm.init / gtm.js,
+    so as a blocker it covers Initialization-fired tags. A Page View blocker does not."""
+    if trigger.get("type") != "customEvent":
+        return False
+    return any(
+        c.get("type") == "matchRegex" and _param(c, "arg1") in ALL_EVENT_REGEXES
+        for c in trigger.get("customEventFilter") or []
+    )
+
+
+def _promo_domains(tag: Dict[str, Any]) -> List[str]:
+    if tag.get("type") != "html":
+        return []
+    html = "".join(p.get("value", "") for p in tag.get("parameter", []) if p.get("key") == "html")
+    return [
+        d for d in extract_domains_from_html(html)
+        if any(d == p or d.endswith("." + p) for p in PROMO_OVERLAY_DOMAINS)
+    ]
+
+
+def evaluate_surface_gating(
+    tags: List[Dict[str, Any]],
+    triggers: List[Dict[str, Any]],
+    variables: List[Dict[str, Any]],
+    classifier_variable: str,
+) -> Dict[str, Any]:
+    """Decide whether every site-wide tag is gated by the page-surface classifier.
+
+    Needed when the container loads on hosts that are not the storefront (e.g. a
+    Cloudflare Google tag gateway with automatic tag placement injects it into
+    every proxied host of the zone, including status pages and internal tools).
+    Rules, all decidable from the container version alone:
+      - an active tag firing on All Pages / Initialization must carry an all-event
+        blocker that tests the classifier, or fire only on host-scoped triggers;
+      - a promo overlay tag must carry an all-event blocker that negates a single
+        allowed surface (allow-list), not a deny-list of known-bad surfaces.
+    """
+    ref = "{{" + classifier_variable + "}}"
+    by_id = {str(t.get("triggerId")): t for t in triggers}
+    report: Dict[str, Any] = {
+        "classifier_variable": classifier_variable,
+        "classifier_present": any(v.get("name") == classifier_variable for v in variables),
+        "site_wide_graded": 0,
+        "site_wide_gated": 0,
+        "promo_graded": 0,
+        "promo_allow_listed": 0,
+        "ungated": [],
+    }
+
+    for tag in tags:
+        if tag.get("paused"):
+            continue
+        name = tag.get("name", "")
+        firing = [str(i) for i in tag.get("firingTriggerId") or []]
+        blockers = [by_id[str(i)] for i in tag.get("blockingTriggerId") or [] if str(i) in by_id]
+        surface_blockers = [
+            b for b in blockers
+            if _is_all_event_trigger(b) and any(_references(c, ref) for c in _conditions(b))
+        ]
+        host_scoped = bool(firing) and all(
+            i not in SITE_WIDE_TRIGGER_IDS
+            and any(_references(c, "{{Page Hostname}}") or _references(c, ref) for c in _conditions(by_id.get(i, {})))
+            for i in firing
+        )
+        site_wide = any(i in SITE_WIDE_TRIGGER_IDS for i in firing)
+        promo = _promo_domains(tag)
+
+        if site_wide:
+            report["site_wide_graded"] += 1
+            if surface_blockers:
+                report["site_wide_gated"] += 1
+            else:
+                page_view_only = [
+                    b for b in blockers
+                    if not _is_all_event_trigger(b) and any(_references(c, ref) for c in _conditions(b))
+                ]
+                if page_view_only and any(i in INIT_TRIGGER_IDS for i in firing):
+                    reason = "surface blocker is not all-event, so it misses the Initialization event"
+                else:
+                    reason = "fires site-wide with no all-event surface blocker"
+                report["ungated"].append({"tag": name, "reason": reason})
+
+        if promo:
+            report["promo_graded"] += 1
+            allow_listed = any(
+                _references(c, ref) and _param(c, "negate") == "true"
+                for b in surface_blockers for c in _conditions(b)
+            )
+            if allow_listed:
+                report["promo_allow_listed"] += 1
+            else:
+                reason = (
+                    "promo overlay gated by host only; framed, editor and system pages still show it"
+                    if host_scoped or surface_blockers
+                    else "promo overlay has no surface gate"
+                )
+                report["ungated"].append({"tag": name, "reason": reason, "domains": promo})
+
+    return report
+
+
 @dataclass
 class ContainerAuditResult:
     brand_id: str
@@ -210,6 +340,7 @@ class ContainerAuditResult:
     tags_summary: List[Dict[str, Any]] = field(default_factory=list)
     third_party_scripts: List[Dict[str, Any]] = field(default_factory=list)
     hijacked_domains_found: List[str] = field(default_factory=list)
+    surface_gating: Dict[str, Any] = field(default_factory=dict)
 
 
 def safe_json_loads(text: str) -> Any:
@@ -458,6 +589,20 @@ def audit_container(config: Dict[str, Any], check_snippets: bool = True) -> Cont
         result.issues.append("WARN: Conversion-critical blocking triggers (cart, checkout, thank-you) missing.")
         result.score -= 10
 
+    # Surface gating applies where the container loads beyond the storefront.
+    gating_cfg = config.get("surface_gating") or {}
+    if gating_cfg.get("classifier_variable"):
+        sg = evaluate_surface_gating(tags, triggers, variables, gating_cfg["classifier_variable"])
+        result.surface_gating = sg
+        if not sg["classifier_present"]:
+            result.issues.append(
+                f"CRITICAL: Surface classifier variable '{sg['classifier_variable']}' is missing; every surface blocker is inert."
+            )
+            result.score -= 25
+        for u in sg["ungated"]:
+            result.issues.append(f"WARN: Surface gating: tag '{u['tag']}' - {u['reason']}.")
+            result.score -= 5
+
     # 4. Snippet Probe
     if check_snippets and url:
         is_live = probe_public_snippet(url, public_id)
@@ -492,8 +637,8 @@ def generate_markdown_report(
         f"",
         f"## Executive Portfolio Matrix",
         f"",
-        f"| Brand | Container ID | Live Ver | Tags / Triggers | GA4 | Google Ads | Meta Pixel | Linker | E-Comm | Leads | Blocking | Snippet | Score | Status |",
-        f"|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        f"| Brand | Container ID | Live Ver | Tags / Triggers | GA4 | Google Ads | Meta Pixel | Linker | E-Comm | Leads | Blocking | Surface | Snippet | Score | Status |",
+        f"|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
 
     for r in results:
@@ -507,9 +652,11 @@ def generate_markdown_report(
         leads_icon = "✅" if r.lead_conversion_present else "⚪"
         block_icon = "✅" if r.blocking_triggers_present else "⚪"
         snip_icon = "✅" if r.snippet_detected_live else "⚠️"
+        sg = r.surface_gating
+        surface_icon = "⚪" if not sg else ("✅" if sg.get("classifier_present") and not sg.get("ungated") else "❌")
 
         lines.append(
-            f"| **{r.brand_name}** | `{r.public_id}` | v{r.live_version_id or '?'} | {r.tag_count} / {r.trigger_count} | {ga4_icon} | {gads_icon} | {meta_icon} | {linker_icon} | {ecomm_icon} | {leads_icon} | {block_icon} | {snip_icon} | **{r.score}%** | {status_icon} |"
+            f"| **{r.brand_name}** | `{r.public_id}` | v{r.live_version_id or '?'} | {r.tag_count} / {r.trigger_count} | {ga4_icon} | {gads_icon} | {meta_icon} | {linker_icon} | {ecomm_icon} | {leads_icon} | {block_icon} | {surface_icon} | {snip_icon} | **{r.score}%** | {status_icon} |"
         )
 
     # Auto-Build Execution Ledger if plans were run
@@ -561,6 +708,23 @@ def generate_markdown_report(
         lines.append(f"\n> 🛡️ **Supply Chain Safety Gate**: 0 hijacked/deprecated domains found across {total_scripts} tracked script configurations.\n")
     else:
         lines.append(f"\n> ⚠️ **Supply Chain Alert**: Found {total_hijacked} hijacked/deprecated domain instances requiring immediate remediation!\n")
+
+    gated = [r for r in results if r.surface_gating]
+    if gated:
+        lines.extend([
+            f"",
+            f"## Surface Gating (where the container may run)",
+            f"",
+            f"| Brand | Classifier | Site-wide tags gated | Promo overlays allow-listed | Ungated |",
+            f"|---|---|---|---|---|",
+        ])
+        for r in gated:
+            sg = r.surface_gating
+            ungated = "; ".join(u["tag"] for u in sg["ungated"]) or "none"
+            lines.append(
+                f"| **{r.brand_name}** | `{sg['classifier_variable']}` {'✅' if sg['classifier_present'] else '❌ missing'} "
+                f"| {sg['site_wide_gated']}/{sg['site_wide_graded']} | {sg['promo_allow_listed']}/{sg['promo_graded']} | {ungated} |"
+            )
 
     lines.extend([
         f"",

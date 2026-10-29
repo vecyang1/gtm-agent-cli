@@ -4,6 +4,8 @@ description: >
   Use when managing Google Tag Manager from an agent. Provides a safe workflow
   around gtm-agent and @owntag/gtm-cli: doctor, inventory, snapshots, diffs,
   declarative dry-run plans, guarded publish, backups, and raw upstream passthrough.
+  Also use when a popup, pixel, or analytics tag shows up where it should not
+  (status page, subdomain, bot-challenge page, editor, iframe) — Surface Gating.
 ---
 
 # gtm-agent
@@ -14,7 +16,7 @@ description: >
 - **Source:** https://github.com/vecyang1/gtm-agent-cli
 - **Author:** Vec; Maintainer: Vec + Codex
 - **Created:** 2026-07-21
-- **Updated:** 2026-08-10
+- **Updated:** 2026-10-29
 - **Review status:** `reviewed`
 
 Use this skill for Google Tag Manager operations.
@@ -44,8 +46,8 @@ Use this skill for Google Tag Manager operations.
 - Prefer a dedicated GTM workspace for changes.
 - Use `gtm-agent raw -- ...` only when the declarative safety layer lacks a needed upstream command.
 - Mutating raw commands require `--allow-mutation`; raw publish requires `--allow-publish --confirm <container-id>`.
-- When invoking upstream raw version publish (`gtm-agent raw -- versions publish`), always use explicit long-form flags `--account-id <id> --container-id <id> --version-id <id> --confirm <id>`. Never use `-c` because upstream CLI treats `-c` as ambiguous between `--child-container-id` and `--container-id`, and omitting `--confirm` prompts interactively on stdin which blocks unattended automation.
-- Declarative trigger plans support `config`; tag plans support either `firingTriggerId` / `firingTriggerIds` or `blockingTriggerId` / `blockingTriggerIds`, using quoted positive-decimal IDs only. For promotional widgets and third-party trackers, enforce blocking triggers on conversion-critical paths (`cart`, `checkout`, `thank-you`, `order-received`, `receipt`, `customer-dashboard`) to protect conversion rates and third-party quotas.
+- When invoking upstream raw version publish, the safety flags belong to the **wrapper, before `--`**, and the upstream command takes only long-form IDs: `gtm-agent raw --allow-mutation --allow-publish --confirm <container-id> -- versions publish --account-id <id> --container-id <id> --version-id <id> < /dev/null`. Upstream `gtm-cli` 1.5.8 has no `--confirm` option and exits 2 (`Unknown option "--confirm"`) if one follows `--` (measured 2026-10-29). Never use `-c` because upstream CLI treats `-c` as ambiguous between `--child-container-id` and `--container-id`. Redirect stdin from `/dev/null` so no interactive prompt can block unattended runs, and read the result back with `gtm versions live` rather than parsing the mutation's output, which mixes a human receipt into `--output json`.
+- Declarative trigger plans support `config`; tag plans support either `firingTriggerId` / `firingTriggerIds` or `blockingTriggerId` / `blockingTriggerIds`, using quoted positive-decimal IDs only. For promotional widgets and third-party trackers, enforce blocking triggers on conversion-critical paths (`cart`, `checkout`, `thank-you`, `order-received`, `receipt`, `customer-dashboard`) to protect conversion rates and third-party quotas. Where the container loads beyond the storefront, also apply **Surface Gating** (below) — path blockers do not stop a popup on another host.
 - When a tag needs a newly created trigger, use two plans: create the trigger, inventory the workspace to obtain its assigned ID, then create the tag. Before each create, inspect inventory for an exact-name match.
 
 ## Enough Or Extend
@@ -266,6 +268,70 @@ and GTM mappings. Require the owning application's deploy/version evidence plus
 public no-store/cache proof and fail-safe branch evidence separately from any
 GTM inventory or publish record.
 
+## Surface Gating (Where May A Tag Run?)
+
+A container does not know which site it is on. "All Pages" means every page that
+loads the snippet, and the snippet can reach pages nobody designed it for:
+
+- **Cloudflare Google tag gateway with automatic placement (`setUpTag: true`)
+  injects the loader into every proxied HTML response of the zone** — status
+  pages, Pages research reports, Access-gated internal dashboards (after
+  sign-in), and the host's bot-challenge page. Cloudflare documents that it
+  cannot be scoped per hostname and that Configuration Rules cannot disable it;
+  its own recommended control is GTM triggers. `cf-dns tag-gateway <zone>` lists
+  which hosts get the loader.
+- A WordPress page builder (Divi `?et_fb=1`), post preview, wp-admin, or an iframe
+  embed renders the same page in a context no visitor sees.
+
+Measured 2026-10-29 on GlintMuse: a Claspo "15% off — clock's running" countdown
+showed on `status.glintmuse.com`, and a "$15 Off" popup covered the CONTINUE
+button of SiteGround's robot challenge (`/.well-known/captcha/`). GA4, Meta Pixel,
+Clarity session recording, Growify, and Ads also fired on 12 non-storefront hosts.
+Nothing errored; only a screenshot showed it.
+
+**Pattern** (reference: `plans/glintmuse_surface_gating.yaml`, live as v29):
+
+1. One Custom JavaScript variable (`CJS - Page Surface`) owns the classification:
+   `internal` (host not a customer surface) · `system` (`/.well-known/`,
+   `/cdn-cgi/`) · `editor` (wp-admin, wp-login, builder/preview query params) ·
+   `storefront` / `customer_app`, with a `_framed` suffix inside an iframe. Hosts
+   are an allow-list, so a new subdomain is `internal` by default.
+2. Blockers are **Custom Event triggers matching `.*`** plus a classifier
+   condition. A Page View blocker does not fire on `gtm.init`, so it never blocks
+   a tag fired on Initialization (the GA4 and Ads Google tags).
+3. Analytics/marketing tags get the deny-list blocker
+   (`^(internal|system|editor)$`) — customer apps such as a quiz keep their
+   measurement. Promo overlays (Claspo, Taku) get the allow-list blocker
+   (`does not equal storefront`), which also covers framed, editor, system and the
+   quiz app. If the classifier ever throws, analytics fails open and promos fail
+   closed.
+4. Attaching blockers to existing tags needs `tags update --blocking-trigger-id`
+   through `raw`; pass the full list (existing IDs plus the new one).
+
+**Gate:** add `"surface_gating": {"classifier_variable": "CJS - Page Surface"}` to
+the container's entry in `config/containers.local.json`. `portfolio_gtm_audit.py`
+then fails any active site-wide tag without an all-event classifier blocker, any
+promo overlay not allow-listed, a Page View blocker on an Initialization tag, and a
+missing classifier variable, and prints `site-wide gated n/N, promo allow-listed
+n/N`. On the pre-fix GlintMuse v27 it reports 0/7 and 0/2; on v29, 7/7 and 2/2.
+
+*Choosing the Rung*: hardened into `portfolio_gtm_audit.py` (Rung 3) and
+`test_surface_gating.py` (Rung 4) because a tag on the wrong surface raises no
+error (**silent failure**), recurs with every new All Pages tag and every new
+subdomain (**repeated cost**), and is read straight off the trigger graph
+(**decidable predicate**). Which hosts count as customer surfaces, and which
+vendors are promo overlays, stay judgement in the classifier and
+`PROMO_OVERLAY_DOMAINS`.
+
+**Verify in a browser, not only in GTM.** `gtm.js` from the gateway path is
+`private, max-age=900`, so a browser runs the previous version for up to 15
+minutes after publish. Refresh it with `fetch('/s0rx/', {cache: 'reload'})` on the
+page's origin before reloading, and confirm `transferSize > 0`. Count GA4 hits by
+`[?&]tid=G-` — through the gateway they go to `/<path>/ag/g/c`, not
+`/g/collect`, so a `/g/collect` regex reports zero hits on every page. Check a
+storefront page as the positive control; from a challenged egress, run the probe
+from a VPS rather than solving the challenge.
+
 ## Standard Workflow
 
 ```bash
@@ -292,8 +358,9 @@ Publish only after review:
 ```bash
 gtm-agent apply publish.yaml --execute --allow-publish --confirm <container-id> --json
 
-# Or upstream raw version publish (requires explicit long flags; -c is ambiguous):
-gtm-agent raw -- versions publish --account-id <account> --container-id <container> --version-id <version> --confirm <container-id> --allow-publish
+# Or upstream raw version publish (wrapper flags before --, long upstream flags after; -c is ambiguous):
+gtm-agent raw --allow-mutation --allow-publish --confirm <container-id> -- versions publish --account-id <account> --container-id <container> --version-id <version> < /dev/null
+gtm versions live --account-id <account> --container-id <container> --output json   # the receipt
 ```
 
 ### Verify A Publish By Comparing Versions, Not Workspaces
@@ -396,6 +463,7 @@ python3 skills/gtm-agent/tests/test_contract.py
 python3 skills/gtm-agent/tests/test_account_admin_check.py
 python3 skills/gtm-agent/tests/test_autobuild.py
 python3 skills/gtm-agent/tests/test_supply_chain_audit.py
+python3 skills/gtm-agent/tests/test_surface_gating.py
 python3 -m unittest discover -s skills/gtm-agent/tests -p "test_*.py"
 go test ./...
 go vet ./...

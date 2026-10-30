@@ -1,6 +1,6 @@
-# GlintMuse surface gating (2026-10-29).
+# Acme Luxury DTC surface gating (2026-10-29).
 # Cloudflare Google tag gateway (setUpTag) injects GTM-P8VTXJ65 into EVERY proxied
-# glintmuse.com host -- status page, research pages, Access-gated dashboards --
+# example-store.com host -- status page, research pages, Access-gated dashboards --
 # and Cloudflare cannot scope it per hostname. So the container decides where
 # tags may run. One classifier variable, two all-event blocking triggers:
 #   - promo overlays (Claspo, Taku) run only on a top-level storefront page
@@ -24,11 +24,11 @@ actions:
           value: |
             function() {
               // Single owner of "which surface is this page?". The CF tag gateway
-              // injects this container on every glintmuse.com host, so tags gate here.
+              // injects this container on every example-store.com host, so tags gate here.
               var host = (location.hostname || '').toLowerCase();
               var surface;
-              if (/^(www\.)?glintmuse\.com$/.test(host)) { surface = 'storefront'; }
-              else if (host === 'diagnose.glintmuse.com') { surface = 'customer_app'; }
+              if (/^(www\.)?example-store\.com$/.test(host)) { surface = 'storefront'; }
+              else if (host === 'diagnose.example-store.com') { surface = 'customer_app'; }
               else { return 'internal'; }
               var path = location.pathname || '';
               var query = location.search || '';

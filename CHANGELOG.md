@@ -4,14 +4,14 @@
 
 ### Added
 - **Surface gating audit (`portfolio_gtm_audit.py`)**: `evaluate_surface_gating()` decides, from the live container version alone, whether every active site-wide tag (All Pages / Initialization / Consent Init) carries an all-event blocker that tests the page-surface classifier, and whether every promo overlay (`PROMO_OVERLAY_DOMAINS`: Claspo, Taku) is allow-listed to the storefront. It flags Page View blockers on Initialization-fired tags and a missing classifier variable, and reports `site-wide gated n/N` and `promo allow-listed n/N`. Opt in per container with `"surface_gating": {"classifier_variable": "..."}`. New `Surface` column and section in the ledger.
-- `tests/test_surface_gating.py` (7 tests, fixtures from the live GlintMuse v29 shapes; mutation-checked).
-- `plans/glintmuse_surface_gating.yaml`: reference classifier variable and blocker triggers.
+- `tests/test_surface_gating.py` (7 tests, fixtures from the live Acme Luxury DTC v29 shapes; mutation-checked).
+- `plans/ecommerce_surface_gating.yaml`: reference classifier variable and blocker triggers.
 
 ### Fixed
 - SKILL.md publish rule: `--confirm` belongs to the wrapper before `--`; upstream gtm-cli 1.5.8 rejects it after `--` with exit 2.
 
 ### Live change (GTM-P8VTXJ65)
-- v28 + v29: `CJS - Page Surface` (56), `Block - Non-Customer Surface (all events)` (57) on GA4, Clarity, Conversion Linker, Meta Pixel, Ads tag, Growify, Chatwoot, Nuwtonic; `Block - Promo Overlay Off Storefront (all events)` (58) on Claspo and Taku. Cause: Cloudflare Google tag gateway auto-placement injected the container on every proxied glintmuse.com host, so Claspo showed on status.glintmuse.com and over SiteGround's bot challenge. Rollback: republish v27 (backup `backups/glintmuse-v27-before-surface-gating-20261029.backup.json`).
+- v28 + v29: `CJS - Page Surface` (56), `Block - Non-Customer Surface (all events)` (57) on GA4, Clarity, Conversion Linker, Meta Pixel, Ads tag, Growify, Chatwoot, Nuwtonic; `Block - Promo Overlay Off Storefront (all events)` (58) on Claspo and Taku. Cause: Cloudflare Google tag gateway auto-placement injected the container on every proxied example-store.com host, so Claspo showed on status.example-store.com and over SiteGround's bot challenge. Rollback: republish v27 (backup `backups/storefront-v27-before-surface-gating-20261029.backup.json`).
 
 ## [1.3.0] - 2026-10-27
 
@@ -35,7 +35,7 @@
   - Added transient retry with backoff in `portfolio_gtm_audit.py` to protect against CLI/Deno process socket timeouts during multi-container sequential sweeps.
   - Added unified Python CLI entrypoint `skills/gtm-agent/scripts/gtm_agent.py` (`python3 scripts/gtm_agent.py --help`, `audit`, `autobuild`, `raw`).
   - Integrated `--auto-build` / `--auto-fix` into `portfolio_gtm_audit.py` supporting dry-run inspection, live execution, post-publish verification, and an automated Self-Healing Ledger in markdown reports.
-  - Automatically resolved and deployed BelovedPals (`GTM-MSW8GJXP`) GA4 Google Tag (`G-1L9JEX0TBN`) to live version 11, elevating portfolio tracking health to **100% (6/6 brands PASS)**.
+  - Automatically resolved and deployed Acme Pet Care (`GTM-MSW8GJXP`) GA4 Google Tag (`G-1L9JEX0TBN`) to live version 11, elevating portfolio tracking health to **100% (6/6 brands PASS)**.
   - Added test suite `skills/gtm-agent/tests/test_autobuild.py` covering plan generation, schema invariants, idempotency deduplication, safety gates, rollback backups, dry-run mode, mutation error halts, and publish confirmation.
 - Added `portfolio_gtm_audit.py` with multi-brand tracking matrix, automated live container auditing for GA4, Google Ads, Meta Pixel, Conversion Linker, Ecommerce, and Leads, with automated state and receipt writeback for `CAD-20261019-portfolio-gtm-ga4-weekly-audit`.
 - Fixed Conversion Linker cross-domain parameter hygiene in Container `GTM-5G7SFL9R` (Version 25): pruned self-referencing root domain `example.com` and subdomains from `linkerDomains`, restricting cross-domain tracking strictly to verified external destinations (`zylvie.com, buildfast.fyi`) to eliminate unwanted `_gl` URL decorations.
@@ -89,7 +89,7 @@
 ### Automated Cadence
 - Executed weekly Portfolio GTM & GA4 Tracking & Conversion Audit (`CAD-20261019-portfolio-gtm-ga4-weekly-audit`).
 - Verified 6/6 portfolio containers at 100% health with live HTTP snippet detection across all brands.
-- Recorded live version advance on Global Growth Co (`GTM-MKP5HFBS` v9 -> v10) with zero tracking drift.
+- Recorded live version advance on Global Enterprise Portal (`GTM-MKP5HFBS` v9 -> v10) with zero tracking drift.
 
 ## [2026-10-22] - 2026-10-22
 

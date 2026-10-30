@@ -283,13 +283,13 @@ loads the snippet, and the snippet can reach pages nobody designed it for:
 - A WordPress page builder (Divi `?et_fb=1`), post preview, wp-admin, or an iframe
   embed renders the same page in a context no visitor sees.
 
-Measured 2026-10-29 on GlintMuse: a Claspo "15% off — clock's running" countdown
-showed on `status.glintmuse.com`, and a "$15 Off" popup covered the CONTINUE
+Measured 2026-10-29 on Acme Luxury DTC: a Claspo "15% off — clock's running" countdown
+showed on `status.example-store.com`, and a "$15 Off" popup covered the CONTINUE
 button of SiteGround's robot challenge (`/.well-known/captcha/`). GA4, Meta Pixel,
 Clarity session recording, Growify, and Ads also fired on 12 non-storefront hosts.
 Nothing errored; only a screenshot showed it.
 
-**Pattern** (reference: `plans/glintmuse_surface_gating.yaml`, live as v29):
+**Pattern** (reference: `plans/ecommerce_surface_gating.yaml`, live as v29):
 
 1. One Custom JavaScript variable (`CJS - Page Surface`) owns the classification:
    `internal` (host not a customer surface) · `system` (`/.well-known/`,
@@ -313,7 +313,7 @@ the container's entry in `config/containers.local.json`. `portfolio_gtm_audit.py
 then fails any active site-wide tag without an all-event classifier blocker, any
 promo overlay not allow-listed, a Page View blocker on an Initialization tag, and a
 missing classifier variable, and prints `site-wide gated n/N, promo allow-listed
-n/N`. On the pre-fix GlintMuse v27 it reports 0/7 and 0/2; on v29, 7/7 and 2/2.
+n/N`. On the pre-fix Acme Luxury DTC v27 it reports 0/7 and 0/2; on v29, 7/7 and 2/2.
 
 *Choosing the Rung*: hardened into `portfolio_gtm_audit.py` (Rung 3) and
 `test_surface_gating.py` (Rung 4) because a tag on the wrong surface raises no

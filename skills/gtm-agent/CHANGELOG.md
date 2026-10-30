@@ -18,15 +18,15 @@ Web Supply Chain & Third-Party Script Security Audit Engine: added automated ext
 
 ## [1.2.0] - 2026-10-26
 
-Cross-Domain Conversion Linker Synthesis & Hyphen-Tolerant E-Commerce Audit Check: added cross-domain linker domain decoration support in `gtm_autobuild.py`, hardened tag name pattern matching in `portfolio_gtm_audit.py`, and published container version 12 across `Beloved Pals` (`189484691`) and `Learning with Vy` (`226299748`).
+Cross-Domain Conversion Linker Synthesis & Hyphen-Tolerant E-Commerce Audit Check: added cross-domain linker domain decoration support in `gtm_autobuild.py`, hardened tag name pattern matching in `portfolio_gtm_audit.py`, and published container version 12 across `Acme Pet Care` (`189484691`) and `Learning with Vy` (`226299748`).
 
 ### Added
 - **Cross-Domain Conversion Linker Synthesis (`scripts/gtm_autobuild.py`)**:
   - `GtmAutoBuilder` now extracts `linker_domains` from container configuration.
   - Automatically synthesizes cross-domain parameters for `gclidw` (`enableCrossDomain=true`, `acceptIncoming=true`, `linkerDomains=<domains>`, `urlPosition=query`), linking primary and storefront subdomains across third-party checkout rails.
 - **Cross-Domain Linker Deployment**:
-  - `Learning with Vy` (Container `226299748`, Version 12): Tag 16 `gclidw` firing on All Pages linking `xinchaovi.com, store.xinchaovi.com, zylvie.com`.
-  - `Beloved Pals` (Container `189484691`, Version 12): Tag 17 `gclidw` linking `belovedpals.com, store.belovedpals.com, zylvie.com`, Tag 19 `gaawe` forwarding dataLayer ecommerce events to `G-1L9JEX0TBN`.
+  - `Learning with Vy` (Container `226299748`, Version 12): Tag 16 `gclidw` firing on All Pages linking `academy-example.com, store.academy-example.com, zylvie.com`.
+  - `Acme Pet Care` (Container `189484691`, Version 12): Tag 17 `gclidw` linking `petcare-example.com, store.petcare-example.com, zylvie.com`, Tag 19 `gaawe` forwarding dataLayer ecommerce events to `G-1L9JEX0TBN`.
 
 ### Fixed
 - **Hyphen-Tolerant E-Commerce Tag Detection (`scripts/portfolio_gtm_audit.py`)**:

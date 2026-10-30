@@ -45,7 +45,7 @@ def main() -> int:
         "audit",
         help="Audit GTM & GA4 tracking compliance across portfolio brands",
     )
-    audit_parser.add_argument("--brand", help="Target brand id (e.g. glintmuse, belovedpals)")
+    audit_parser.add_argument("--brand", help="Target brand id (e.g. acme-store, acme-pet)")
     audit_parser.add_argument("--no-snippets", action="store_true", help="Skip public HTTP snippet probes")
     audit_parser.add_argument("--json", action="store_true", help="Output JSON results to stdout")
     audit_parser.add_argument("--execute", action="store_true", help="Execute live mutations and write receipts")
@@ -57,7 +57,7 @@ def main() -> int:
         "autobuild",
         help="Auto-build and self-heal missing conversion events, pixels, and tracking tags",
     )
-    autobuild_parser.add_argument("--brand", help="Target brand id (e.g. glintmuse, belovedpals)")
+    autobuild_parser.add_argument("--brand", help="Target brand id (e.g. acme-store, acme-pet)")
     autobuild_parser.add_argument("--execute", action="store_true", help="Execute mutations (default: dry-run)")
     autobuild_parser.add_argument("--allow-publish", action="store_true", help="Publish newly created version")
     autobuild_parser.add_argument("--confirm", help="Container ID confirmation required for publishing (or 'all')")

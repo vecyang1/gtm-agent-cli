@@ -142,11 +142,12 @@ APPROVED_VENDOR_DOMAINS: Set[str] = {
     "app.chaport.com",
     "cdn.growify.ai",
     "cdn.nuwtonic.com",
-    "worldinspirelab.com",
-    "glintmuse.com",
-    "belovedpals.com",
-    "globalgrowthco.com",
-    "xinchaovi.com",
+    "example.com",
+    "example-store.com",
+} | {
+    urllib.parse.urlparse(c.get("primary_url", "")).netloc.lower().removeprefix("www.")
+    for c in PORTFOLIO_CONTAINERS
+    if c.get("primary_url")
 }
 
 # Surface gating: vendors whose tag draws a promotional overlay (popup, countdown
@@ -749,7 +750,7 @@ def generate_markdown_report(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Portfolio GTM & GA4 Weekly Audit & Self-Healing Engine")
-    parser.add_argument("--brand", help="Audit specific brand id (e.g. glintmuse, belovedpals)")
+    parser.add_argument("--brand", help="Audit specific brand id (e.g. acme-store, acme-pet)")
     parser.add_argument("--no-snippets", action="store_true", help="Skip public HTTP snippet probes")
     parser.add_argument("--output", help="Write report to specific markdown path")
     parser.add_argument("--receipt", help="Write JSON execution receipt to specific path")

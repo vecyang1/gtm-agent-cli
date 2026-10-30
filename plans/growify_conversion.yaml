@@ -58,7 +58,7 @@ actions:
                     }
                     var pId = String(it.item_id || it.id || it.sku || ('SKU_' + orderId));
                     var pName = String(it.item_name || it.name || ('Item ' + (j + 1)));
-                    var pBrand = String(it.item_brand || it.brand || 'GlintMuse');
+                    var pBrand = String(it.item_brand || it.brand || 'Acme Luxury DTC');
                     var pVal = parseFloat(it.value) || (pPrice * pQty);
 
                     products.push({
@@ -77,7 +77,7 @@ actions:
                     productId: 'ORDER_' + orderId,
                     productName: 'Order ' + orderId,
                     productPrice: totalVal,
-                    productBrand: 'GlintMuse',
+                    productBrand: 'Acme Luxury DTC',
                     productQuantity: 1,
                     purchaseValue: totalVal
                   });

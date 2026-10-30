@@ -2,7 +2,7 @@
 """
 test_surface_gating.py - Surface gating audit: may a tag run on this page?
 
-Fixtures mirror the GlintMuse container v29 shapes (2026-10-29), where a
+Fixtures mirror the Acme Luxury DTC container v29 shapes (2026-10-29), where a
 Cloudflare Google tag gateway injected the container into every proxied host and
 a Claspo popup appeared on the status page and over the SiteGround bot challenge.
 """
@@ -45,7 +45,7 @@ PROMO_OFF_STOREFRONT = _all_event_blocker("58", _cond("equals", "{{CJS - Page Su
 STOREFRONT_HOST = {
     "triggerId": "18",
     "type": "pageview",
-    "filter": [_cond("matchRegex", "{{Page Hostname}}", r"^(www\.)?glintmuse\.com$")],
+    "filter": [_cond("matchRegex", "{{Page Hostname}}", r"^(www\.)?example-store\.com$")],
 }
 CART = {"triggerId": "15", "type": "pageview", "filter": [_cond("contains", "{{Page URL}}", "cart")]}
 

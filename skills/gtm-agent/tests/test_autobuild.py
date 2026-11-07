@@ -471,6 +471,57 @@ class GtmAutoBuildTests(unittest.TestCase):
         self.assertTrue(publish_call[1].get("allow_publish"))
         self.assertEqual(publish_call[1].get("confirm"), "222222")
 
+    def test_auto_prunes_conflicting_dest_ga_tag_on_compiler_error(self):
+        mock_calls = []
+        version_create_attempts = [0]
+
+        def mock_runner(cmd, **kwargs):
+            mock_calls.append((cmd, kwargs))
+            if "workspaces list" in cmd:
+                return [{"workspaceId": "5", "name": "Default Workspace"}]
+            if "workspaces create" in cmd:
+                return {"workspaceId": "101", "name": "AutoFix-Test"}
+            if "triggers create" in cmd:
+                return {"triggerId": "301"}
+            if "tags create" in cmd:
+                return {"tagId": "401"}
+            if "built-in-variables enable" in cmd:
+                return [{"type": "event"}]
+            if "versions create" in cmd:
+                version_create_attempts[0] += 1
+                if version_create_attempts[0] == 1:
+                    return {
+                        "compilerError": True,
+                        "containerVersion": {"containerVersionId": "0"},
+                    }
+                return {"containerVersion": {"containerVersionId": "2"}}
+            if "tags list" in cmd:
+                return [
+                    {"tagId": "401", "name": "GA4 - Google Tag", "type": "googtag"},
+                    {"tagId": "7", "name": "Google Analytics G-TESTGA4ID", "type": "dest_ga"},
+                ]
+            if "tags delete" in cmd:
+                return {"deleted": True}
+            if "versions publish" in cmd:
+                return {"containerVersionId": "2", "published": True}
+            return {}
+
+        builder = GtmAutoBuilder(mock_runner)
+        plan = builder.synthesize_plan(self.config, self.audit_result, self.live_version_data)
+        options = AutoBuildOptions(
+            execute=True,
+            allow_publish=True,
+            confirm="222222",
+            backup_dir=self.tmp_dir,
+        )
+
+        res = builder.execute_plan(plan, self.config, self.live_version_data, options)
+        self.assertEqual(res.status, "published")
+        self.assertEqual(res.created_version_id, "2")
+        delete_calls = [c for c in mock_calls if "tags delete" in c[0] and "--tag-id 7" in c[0]]
+        self.assertEqual(len(delete_calls), 1)
+        self.assertEqual(version_create_attempts[0], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

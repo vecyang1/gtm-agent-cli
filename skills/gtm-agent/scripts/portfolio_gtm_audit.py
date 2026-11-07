@@ -436,7 +436,10 @@ def probe_public_snippet(url: str, public_id: str) -> bool:
         req = urllib.request.Request(
             url,
             headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Dest": "document",
             },
         )
         with urllib.request.urlopen(req, timeout=10) as resp:

@@ -637,6 +637,29 @@ class GtmAutoBuilder:
         if isinstance(ver_res, dict) and "error" in ver_res:
             raise SafetyGateError(f"Failed to create container version: {ver_res['error']}")
 
+        if isinstance(ver_res, dict) and ver_res.get("compilerError"):
+            # GTM backend may auto-inject a conflicting `dest_ga` tag when linking a newly
+            # created GA4 stream to a `googtag` in a container with supportGtagConfigs=False.
+            ws_tags = self.run_cmd(
+                f"tags list --account-id {acc_id} --container-id {cont_id} --workspace-id {workspace_id} --output json"
+            )
+            pruned_dest_ga = False
+            if isinstance(ws_tags, list):
+                for wt in ws_tags:
+                    if isinstance(wt, dict) and wt.get("type") == "dest_ga" and wt.get("tagId"):
+                        self.run_cmd(
+                            f"tags delete --account-id {acc_id} --container-id {cont_id} --workspace-id {workspace_id} --tag-id {wt['tagId']} --force",
+                            allow_mutation=True,
+                        )
+                        pruned_dest_ga = True
+            if pruned_dest_ga:
+                ver_res = self.run_cmd(
+                    f"versions create --name '{ver_name}' --notes '{ver_notes}' --account-id {acc_id} --container-id {cont_id} --workspace-id {workspace_id} --output json",
+                    allow_mutation=True,
+                )
+                if isinstance(ver_res, dict) and "error" in ver_res:
+                    raise SafetyGateError(f"Failed to create container version after pruning dest_ga: {ver_res['error']}")
+
         new_ver_id = str(ver_res.get("containerVersionId", ""))
         if not new_ver_id and isinstance(ver_res, dict) and "containerVersion" in ver_res:
             new_ver_id = str(ver_res["containerVersion"].get("containerVersionId", ""))

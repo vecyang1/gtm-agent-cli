@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1] - 2026-11-08
+
+### Added
+- **LeadPost Vendor Domain Whitelist (`portfolio_gtm_audit.py`)**: Added `rdcdn.com` to `APPROVED_VENDOR_DOMAINS` for LeadPost visitor identification pixel tags across DTC containers.
+- **Brand Alias Matching (`portfolio_gtm_audit.py`)**: Supported case-insensitive `--brand` matching against container `aliases` defined in `containers.local.json`.
+- **Portfolio Weekly Cadence Execution (`CAD-20261019-portfolio-gtm-ga4-weekly-audit`)**: Audited 8 portfolio containers; 8/8 healthy (avg score 98.8%), 0 supply chain vulnerabilities across 96 tracked script configurations.
+
 ## [1.5.0] - 2026-11-07
 
 ### Added

@@ -2,6 +2,13 @@
 
 All notable changes to the `gtm-agent` skill will be documented in this file.
 
+## [1.5.1] - 2026-11-08
+
+### Added
+- **LeadPost Vendor Domain Whitelist (`scripts/portfolio_gtm_audit.py`)**: Added `rdcdn.com` to `APPROVED_VENDOR_DOMAINS` for LeadPost visitor identification pixel tags.
+- **Brand Alias Matching (`scripts/portfolio_gtm_audit.py`)**: Supported case-insensitive `--brand` matching against container `aliases` defined in `containers.local.json`.
+- **Portfolio Weekly Cadence Execution (`CAD-20261019-portfolio-gtm-ga4-weekly-audit`)**: Audited 8 portfolio containers; 8/8 healthy (avg score 98.8%), 0 supply chain vulnerabilities across 96 tracked script configurations.
+
 ## [1.3.0] - 2026-10-27
 
 Web Supply Chain & Third-Party Script Security Audit Engine: added automated external script extraction, domain safety classification, deprecated/hijacked domain gatekeeper, and tag pause-state tracking into the portfolio weekly audit cadence (`CAD-20261019-portfolio-gtm-ga4-weekly-audit`).

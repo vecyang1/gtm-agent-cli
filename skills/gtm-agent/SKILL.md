@@ -309,11 +309,11 @@ Nothing errored; only a screenshot showed it.
    through `raw`; pass the full list (existing IDs plus the new one).
 
 **Gate:** add `"surface_gating": {"classifier_variable": "CJS - Page Surface"}` to
-the container's entry in `config/containers.local.json`. `portfolio_gtm_audit.py`
+the container's entry in `config/containers.local.json` (plus optional `"aliases": [...]` for `--brand` matching in `portfolio_gtm_audit.py`). `portfolio_gtm_audit.py`
 then fails any active site-wide tag without an all-event classifier blocker, any
 promo overlay not allow-listed, a Page View blocker on an Initialization tag, and a
 missing classifier variable, and prints `site-wide gated n/N, promo allow-listed
-n/N`. On the pre-fix Acme Luxury DTC v27 it reports 0/7 and 0/2; on v29, 7/7 and 2/2.
+n/N`. On the pre-fix Acme Luxury DTC v27 it reports 0/7 and 0/2; on v29, 7/7 and 2/2. On Car Radio Codes (`GTM-KNXHTL8C`), `v14` scored `40%` (0/7 site-wide gated) before publishing `v15` (`100% PASS`, 7/7 site-wide gated + `DLV - ui_locale` / `DLV - display_currency` mapped across all 7 GA4 funnel tags).
 
 *Choosing the Rung*: hardened into `portfolio_gtm_audit.py` (Rung 3) and
 `test_surface_gating.py` (Rung 4) because a tag on the wrong surface raises no

@@ -134,6 +134,7 @@ APPROVED_VENDOR_DOMAINS: Set[str] = {
     "visitor.leadsourcing.co",
     "widget.cxgenie.ai",
     "app.visitortracking.com",
+    "rdcdn.com",
     "zylvie.com",
     "analytics.tiktok.com",
     "ct.pinterest.com",
@@ -796,7 +797,12 @@ def main() -> int:
 
     target_configs = PORTFOLIO_CONTAINERS
     if args.brand:
-        target_configs = [c for c in PORTFOLIO_CONTAINERS if c["id"] == args.brand]
+        needle = args.brand.strip().lower()
+        target_configs = [
+            c for c in PORTFOLIO_CONTAINERS
+            if c["id"].lower() == needle
+            or needle in [str(a).lower() for a in c.get("aliases", [])]
+        ]
         if not target_configs:
             print(f"Error: Unknown brand '{args.brand}'", file=sys.stderr)
             return 1

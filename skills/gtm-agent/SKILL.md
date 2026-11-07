@@ -435,6 +435,7 @@ When conversion events, marketing pixels, or attribution linkers are missing or 
   - *Choosing the Rung*: Why hardened into tests (`test_autobuild.py`, Rung 4) and builder preflight (`gtm_autobuild.py`, Rung 3): because missing `measurementIdOverride` passes GTM syntax parsing without errors (**silent failure**), affects any newly synthesized tag (**repeated cost**), and has a strictly **decidable predicate**.
 - **Fail-Closed Mutation Halts & Anti-False-Publish**:
   - Any error in `built_in_variables enable`, `triggers create`, or `tags create` halts immediately and skips version creation.
+  - When creating a `googtag` (`GA4 - Google Tag`) in a Web container (`supportGtagConfigs: false`) for a newly linked GA4 measurement stream, GTM's backend may asynchronously inject a conflicting `dest_ga` tag alongside `googtag`, causing `versions create` to return `compilerError: true`. `GtmAutoBuilder.execute_plan()` automatically detects `compilerError: true`, deletes any conflicting `dest_ga` tags in the workspace, and retries `versions create` (`test_auto_prunes_conflicting_dest_ga_tag_on_compiler_error`).
   - Publishing API response must be verified before claiming `published`; on publish error, status becomes `error` and explicit rollback instructions are printed.
   - Empty action plans (`plan.actions == []`) return `skipped` immediately without allocating workspaces or creating empty versions.
 

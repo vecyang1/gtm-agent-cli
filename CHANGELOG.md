@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0] - 2026-11-07
+
+### Added
+- **Self-Healing `dest_ga` Compiler-Error Pruning (`gtm_autobuild.py`)**: When creating a `googtag` (`GA4 - Google Tag`) in a Web container (`supportGtagConfigs: false`) for a newly linked GA4 measurement stream, GTM's backend can asynchronously inject a conflicting `dest_ga` tag alongside `googtag`, causing `versions create` to return `compilerError: true`. `GtmAutoBuilder.execute_plan()` now automatically inspects workspace tags on `compilerError: true`, deletes any `dest_ga` tags, and retries `versions create`. Covered by `test_auto_prunes_conflicting_dest_ga_tag_on_compiler_error` in `tests/test_autobuild.py` (41/41 unit tests passing).
+- **Cloudflare Google Tag Gateway Edge-Snippet Detection (`portfolio_gtm_audit.py`)**: Updated `probe_public_snippet()` to send browser document navigation headers (`Sec-Fetch-Mode: navigate`, `Sec-Fetch-Dest: document`, `Accept: text/html,application/xhtml+xml...`) so `gtm-agent audit` accurately detects GTM containers auto-injected at the edge via Cloudflare Google Tag Gateway (`setUpTag: true`).
+- **Portfolio Onboarding (`containers.local.json`)**: Provisioned and published live Version 2 containers for `x-stepon.com` (`GTM-MKC4VVFL` / `G-3SG26V5KP9`) and `xomoair.com` (`GTM-KH9F4QM3` / `G-R6Q77MVJTP`), achieving `100/100` audit scores on both sites.
+
 ## [1.4.0] - 2026-10-29
 
 ### Added

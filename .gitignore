@@ -49,3 +49,9 @@ graphify-out/
 skills/gtm-agent/reports/
 skills/gtm-agent/config/
 *.local.json
+
+# Security, Private Workspaces & Agent Constitutions
+AGENTS.md
+operations/
+!.env.sample
+!.env.template

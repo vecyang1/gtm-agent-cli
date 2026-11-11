@@ -184,6 +184,15 @@ Powered by:
 
 This project is unofficial and is not affiliated with, endorsed by, or supported by Google.
 
+## Agentic Usage and Distributed Contribution
+
+> Agent接入后可自行推理, 也可以完善和提交回改进。
+
+AI coding agents can autonomously reason over this repository and are welcomed to submit improvements back upstream.
+
+- **Autonomous Reasoning**: Agents can inspect CLI flags, JSON schemas, and test contracts to reason and execute workflows without manual intervention.
+- **Distributed Contribution**: When your agent fixes an edge case, adds an adapter, or improves a workflow in real-world usage, ask your agent to run the test suite and submit a Pull Request via `gh pr create`.
+
 ## License
 
 MIT.

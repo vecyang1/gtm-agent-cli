@@ -19,6 +19,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 PORTFOLIO_AUDIT_SCRIPT = SCRIPT_DIR / "portfolio_gtm_audit.py"
+HISTORY_SCRIPT = SCRIPT_DIR / "gtm_history.py"
 
 
 def run_gtm_agent_binary(subcommand: str, extra_args: list[str]) -> int:
@@ -92,7 +93,14 @@ def main() -> int:
     diff_parser.add_argument("after", help="Path to after snapshot JSON")
     diff_parser.add_argument("--json", action="store_true", help="Output JSON")
 
-    # 7. raw subcommand
+    # 7. history subcommand
+    hist_parser = subparsers.add_parser(
+        "history",
+        help="Archive, unpack, diff, git-replay, and visualize GTM container version history",
+    )
+    hist_parser.add_argument("history_args", nargs=argparse.REMAINDER, help="Subcommand and flags forwarded to gtm_history.py")
+
+    # 8. raw subcommand
     raw_parser = subparsers.add_parser("raw", help="Pass through raw command to upstream gtm CLI")
     raw_parser.add_argument("--allow-mutation", action="store_true", help="Permit mutating commands")
     raw_parser.add_argument("--allow-publish", action="store_true", help="Permit version publishing")
@@ -144,6 +152,9 @@ def main() -> int:
             build_args.extend(["--backup-dir", args.backup_dir])
         build_args.extend(unknown)
         return subprocess.run(build_args).returncode
+
+    elif args.command == "history":
+        return subprocess.run([sys.executable, str(HISTORY_SCRIPT)] + sys.argv[2:]).returncode
 
     elif args.command in ("doctor", "inventory", "snapshot", "diff"):
         return run_gtm_agent_binary(args.command, sys.argv[2:])

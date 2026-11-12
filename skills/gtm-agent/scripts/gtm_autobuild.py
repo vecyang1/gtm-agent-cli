@@ -207,8 +207,10 @@ class GtmAutoBuilder:
         existing_triggers = live_version_data.get("trigger", [])
         existing_variables = live_version_data.get("variable", [])
 
-        # 1. Missing GA4 Config
-        if not getattr(audit_result, "ga4_configured", False):
+        ga4_owner = config.get("ga4_owner", "gtm")
+
+        # 1. Missing GA4 Config (skip GTM auto-build when CMS plugin owns GA4)
+        if ga4_owner != "cms_plugin" and not getattr(audit_result, "ga4_configured", False):
             plan.missing_items.append("GA4 Configuration Tag")
             expected_ga4 = config.get("expected_ga4_id")
             if not expected_ga4:
@@ -259,8 +261,8 @@ class GtmAutoBuilder:
             if not dup:
                 plan.actions.append(item)
 
-        # 3. Missing E-Commerce Forwarder
-        if config.get("requires_ecommerce") and not getattr(audit_result, "ecommerce_forwarding_present", False):
+        # 3. Missing E-Commerce Forwarder (skip GTM auto-build when CMS plugin owns GA4 ecommerce)
+        if ga4_owner != "cms_plugin" and config.get("requires_ecommerce") and not getattr(audit_result, "ecommerce_forwarding_present", False):
             plan.missing_items.append("E-Commerce Forwarding Tag & Trigger")
             # Built-in variable: event
             plan.actions.append(

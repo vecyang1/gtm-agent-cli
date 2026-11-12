@@ -374,6 +374,59 @@ func TestSnapshotRefusesAWorkspaceThatNoLongerExists(t *testing.T) {
 	}
 }
 
+func TestDiffSupportsRawContainerVersionJSONExports(t *testing.T) {
+	tmp := t.TempDir()
+	beforePath := filepath.Join(tmp, "v56.json")
+	afterPath := filepath.Join(tmp, "v57.json")
+	before := `{"accountId":"123","containerId":"456","containerVersionId":"56","tag":[{"tagId":"128","name":"Legacy Conversion","type":"awct"}]}`
+	after := `{"accountId":"123","containerId":"456","containerVersionId":"57","tag":[{"tagId":"138","name":"AW - Conversion Tag B","type":"awud"}]}`
+	if err := os.WriteFile(beforePath, []byte(before), 0o600); err != nil {
+		t.Fatalf("write v56: %v", err)
+	}
+	if err := os.WriteFile(afterPath, []byte(after), 0o600); err != nil {
+		t.Fatalf("write v57: %v", err)
+	}
+	out := runCLI(t, runner.NewFake(nil), "diff", beforePath, afterPath, "--json")
+	if !strings.Contains(out, "AW - Conversion Tag B") || !strings.Contains(out, "Legacy Conversion") {
+		t.Fatalf("diff failed to report container version changes: %s", out)
+	}
+}
+
+func TestDiffRejectsMixingSnapshotAndContainerVersionWithoutFlag(t *testing.T) {
+	tmp := t.TempDir()
+	snapPath := filepath.Join(tmp, "snap.json")
+	verPath := filepath.Join(tmp, "ver.json")
+	if err := os.WriteFile(snapPath, []byte(`{"schemaVersion":"1","accountId":"123","containerId":"456","workspaceId":"7","resources":{}}`), 0o600); err != nil {
+		t.Fatalf("write snap: %v", err)
+	}
+	if err := os.WriteFile(verPath, []byte(`{"accountId":"123","containerId":"456","containerVersionId":"2","tag":[]}`), 0o600); err != nil {
+		t.Fatalf("write ver: %v", err)
+	}
+	var out, errOut bytes.Buffer
+	cmd := cli.NewRoot(cli.Options{Out: &out, Err: &errOut, Runner: runner.NewFake(nil)})
+	cmd.SetArgs([]string{"diff", snapPath, verPath})
+	if err := cmd.ExecuteContext(context.Background()); err == nil {
+		t.Fatalf("expected schema mismatch between workspace snapshot and container version")
+	}
+}
+
+func TestCLIHistoryDelegatesToHistoryScript(t *testing.T) {
+	tmp := t.TempDir()
+	scriptPath := filepath.Join(tmp, "gtm_history.py")
+	if err := os.WriteFile(scriptPath, []byte("print('ok')\n"), 0o600); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	t.Setenv("GTM_HISTORY_SCRIPT", scriptPath)
+	expectedKey := "python3 " + scriptPath + " diff --from 56 --to 57"
+	fake := runner.NewFake(map[string]runner.Result{
+		expectedKey: {Stdout: `{"from":56,"to":57}` + "\n"},
+	})
+	out := runCLI(t, fake, "history", "diff", "--from", "56", "--to", "57")
+	if !strings.Contains(out, `"to":57`) {
+		t.Fatalf("unexpected history output: %s", out)
+	}
+}
+
 func runCLI(t *testing.T, fake *runner.Fake, args ...string) string {
 	t.Helper()
 	var out, errOut bytes.Buffer

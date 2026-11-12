@@ -10,13 +10,20 @@ import (
 	"time"
 )
 
+const (
+	SchemaVersionSnapshot         = "1"
+	SchemaVersionContainerVersion = "container-version/1"
+)
+
 type Snapshot struct {
-	SchemaVersion string                `json:"schemaVersion"`
-	CreatedAt     time.Time             `json:"createdAt"`
-	AccountID     string                `json:"accountId"`
-	ContainerID   string                `json:"containerId"`
-	WorkspaceID   string                `json:"workspaceId"`
-	Resources     map[string][]Resource `json:"resources"`
+	SchemaVersion      string                `json:"schemaVersion"`
+	CreatedAt          time.Time             `json:"createdAt"`
+	AccountID          string                `json:"accountId"`
+	ContainerID        string                `json:"containerId"`
+	WorkspaceID        string                `json:"workspaceId"`
+	ContainerVersionID string                `json:"containerVersionId,omitempty"`
+	VersionName        string                `json:"versionName,omitempty"`
+	Resources          map[string][]Resource `json:"resources"`
 }
 
 type Resource struct {
@@ -100,7 +107,11 @@ func SortResources(resources []Resource) {
 }
 
 func Diff(before, after Snapshot) DiffResult {
-	result := DiffResult{}
+	result := DiffResult{
+		Added:   []Resource{},
+		Removed: []Resource{},
+		Changed: []ChangedResource{},
+	}
 	kinds := map[string]bool{}
 	for kind := range before.Resources {
 		kinds[kind] = true
@@ -146,6 +157,134 @@ func index(resources []Resource) map[string]Resource {
 	return out
 }
 
+func Parse(raw []byte) (Snapshot, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" {
+		return Snapshot{}, fmt.Errorf("snapshot JSON is empty")
+	}
+	var root map[string]any
+	if err := json.Unmarshal(raw, &root); err != nil {
+		return Snapshot{}, err
+	}
+	if _, hasSchema := root["schemaVersion"]; hasSchema {
+		return unmarshalNativeSnapshot(raw)
+	}
+	if _, hasResources := root["resources"]; hasResources {
+		return unmarshalNativeSnapshot(raw)
+	}
+
+	ver := root
+	if wrapped, ok := root["containerVersion"].(map[string]any); ok {
+		ver = wrapped
+	}
+	if !looksLikeContainerVersion(ver) {
+		return Snapshot{}, fmt.Errorf("unrecognized GTM snapshot or container version JSON")
+	}
+	return normalizeContainerVersion(ver), nil
+}
+
+func unmarshalNativeSnapshot(raw []byte) (Snapshot, error) {
+	var snap Snapshot
+	if err := json.Unmarshal(raw, &snap); err != nil {
+		return Snapshot{}, err
+	}
+	if snap.Resources == nil {
+		snap.Resources = map[string][]Resource{}
+	}
+	for kind := range snap.Resources {
+		SortResources(snap.Resources[kind])
+	}
+	return snap, nil
+}
+
+var containerVersionKindMap = []struct {
+	apiKey       string
+	snapshotKind string
+}{
+	{"tag", "tags"},
+	{"trigger", "triggers"},
+	{"variable", "variables"},
+	{"builtInVariable", "builtInVariables"},
+	{"folder", "folders"},
+	{"customTemplate", "customTemplates"},
+	{"client", "clients"},
+	{"transformation", "transformations"},
+	{"zone", "zones"},
+	{"gtagConfig", "gtagConfigs"},
+}
+
+func looksLikeContainerVersion(m map[string]any) bool {
+	if m == nil {
+		return false
+	}
+	if _, ok := m["containerVersionId"]; ok {
+		return true
+	}
+	if _, ok := m["container"]; ok {
+		return true
+	}
+	for _, mapping := range containerVersionKindMap {
+		if _, ok := m[mapping.apiKey]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeContainerVersion(ver map[string]any) Snapshot {
+	accountID := stringField(ver, "accountId")
+	containerID := stringField(ver, "containerId")
+	if containerObj, ok := ver["container"].(map[string]any); ok {
+		if accountID == "" {
+			accountID = stringField(containerObj, "accountId")
+		}
+		if containerID == "" {
+			containerID = stringField(containerObj, "containerId")
+		}
+	}
+
+	resources := make(map[string][]Resource)
+	for _, mapping := range containerVersionKindMap {
+		rawList, ok := ver[mapping.apiKey].([]any)
+		if !ok || len(rawList) == 0 {
+			continue
+		}
+		items := make([]Resource, 0, len(rawList))
+		for _, entry := range rawList {
+			item, ok := entry.(map[string]any)
+			if !ok {
+				continue
+			}
+			res := Resource{
+				Kind:        mapping.snapshotKind,
+				ID:          resourceID(mapping.snapshotKind, item),
+				Name:        stringField(item, "name"),
+				Type:        firstStringField(item, "type", "tagType", "triggerType", "variableType"),
+				Fingerprint: semanticFingerprint(item),
+				Raw:         item,
+			}
+			if res.ID == "" {
+				res.ID = res.Name
+			}
+			items = append(items, res)
+		}
+		if len(items) > 0 {
+			SortResources(items)
+			resources[mapping.snapshotKind] = items
+		}
+	}
+
+	return Snapshot{
+		SchemaVersion:      SchemaVersionContainerVersion,
+		AccountID:          accountID,
+		ContainerID:        containerID,
+		WorkspaceID:        "",
+		ContainerVersionID: stringField(ver, "containerVersionId"),
+		VersionName:        stringField(ver, "name"),
+		Resources:          resources,
+	}
+}
+
 func resourceID(kind string, item map[string]any) string {
 	fields := map[string][]string{
 		"accounts":          {"accountId", "path", "name"},
@@ -154,7 +293,13 @@ func resourceID(kind string, item map[string]any) string {
 		"tags":              {"tagId", "path", "name"},
 		"triggers":          {"triggerId", "path", "name"},
 		"variables":         {"variableId", "path", "name"},
-		"builtInVariables":  {"type", "path", "name"},
+		"builtInVariables":  {"type", "name", "path"},
+		"folders":           {"folderId", "name", "path"},
+		"customTemplates":   {"templateId", "name", "path"},
+		"clients":           {"clientId", "name", "path"},
+		"transformations":   {"transformationId", "name", "path"},
+		"zones":             {"zoneId", "name", "path"},
+		"gtagConfigs":       {"gtagConfigId", "name", "path"},
 		"versionHeaders":    {"containerVersionId", "path", "name"},
 		"containerVersions": {"containerVersionId", "path", "name"},
 	}
@@ -164,6 +309,29 @@ func resourceID(kind string, item map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func semanticFingerprint(item map[string]any) string {
+	cleaned := stripVolatileMetadata(item)
+	encoded, err := json.Marshal(cleaned)
+	if err != nil {
+		return fmt.Sprintf("marshal-error:%v", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:])
+}
+
+func stripVolatileMetadata(item map[string]any) map[string]any {
+	out := make(map[string]any, len(item))
+	for key, val := range item {
+		switch key {
+		case "fingerprint", "path", "tagManagerUrl", "workspaceId":
+			continue
+		default:
+			out[key] = val
+		}
+	}
+	return out
 }
 
 func fingerprint(item map[string]any) string {

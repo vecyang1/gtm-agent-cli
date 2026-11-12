@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.6.0] - 2026-11-12
+
+### Added
+- **Universal `ContainerVersion` Diff Normalization (`internal/snapshot/snapshot.go`, `internal/cli/root.go`)**: Added `snapshot.Parse()` so `gtm-agent diff` and `readSnapshot()` natively parse `schemaVersion: "1"` Workspace Snapshots, raw GTM API `ContainerVersion` JSONs (`versions get`/`live`/`backup`), and GTM UI `exportFormatVersion: 2` exports while stripping volatile metadata (`fingerprint`, `path`, `tagManagerUrl`, `workspaceId`) and normalizing all 10 resource collections. Fixed silent zero-diff failures caused when Go JSON unmarshaling discarded top-level `tag`/`trigger`/`variable` keys. Covered by 5 new Go tests across `internal/snapshot/diff_test.go` and `internal/cli/root_test.go`.
+- **Container Version History Archival, Unpacking, Git Replay & Interactive UI (`gtm-agent history`)**:
+  - `skills/gtm-agent/scripts/gtm_history.py` + `skills/gtm-agent/scripts/gtm_history_viewer.html`, integrated into both Go CLI (`gtm-agent history ...`) and unified Python CLI (`python3 skills/gtm-agent/scripts/gtm_agent.py history ...`).
+  - Subcommands: `archive` (read-only historical version downloader), `build` (`versions_index.json`, `diff_series.json`, `CHANGELOG.md`, unpacked `latest/` with Custom HTML/JS/Template extraction & resolved trigger/folder names, plus self-contained `history_viewer.html`), `diff` (arbitrary `vA -> vB` structured JSON/Markdown diff with code hunks), `git-replay` (chronological Git commits & tags with GTM timestamps), and `serve` (localhost server supporting History API SPA routes `/timeline`, `/compare`, `/search`, `/inspector` and `/api/{overview,diff,search,trace}`).
+  - **Privacy & Repository Isolation Guards**: Blocks un-ignored archive output inside the public repository (`assert_safe_output_dir`) and blocks initializing nested `.git` repositories inside existing parent working trees (`assert_safe_git_repo`).
+  - **Unit Tests**: Added `skills/gtm-agent/tests/test_history.py` (6 tests), bringing Python suite to 47/47 passing tests alongside all Go unit/E2E tests.
+
 ## [1.5.1] - 2026-11-08
 
 ### Added

@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GTM Container History Explorer</title>
+  <style>
+    :root {
+      --bg-base: #0B1313;
+      --bg-surface: #121C1C;
+      --bg-card: #182626;
+      --bg-elevated: #1F3030;
+      --border-subtle: #233838;
+      --border-strong: #334D4D;
+      --text-primary: #F0F5F5;
+      --text-secondary: #9DB3B3;
+      --text-muted: #6E8888;
+      --accent: #2DD4BF;
+      --accent-soft: rgba(45, 212, 191, 0.12);
+      --added: #10B981;
+      --added-soft: rgba(16, 185, 129, 0.12);
+      --changed: #F59E0B;
+      --changed-soft: rgba(245, 158, 11, 0.12);
+      --removed: #F43F5E;
+      --removed-soft: rgba(244, 63, 94, 0.12);
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    .shell {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 24px 20px 64px;
+    }
+
+    header.topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 20px;
+    }
+
+    .brand-title h1 {
+      font-size: 1.45rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+
+    .brand-sub {
+      margin-top: 4px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+
+    .header-meta {
+      text-align: right;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .kpi-card {
+      display: block;
+      text-decoration: none;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 14px 16px;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .kpi-card:hover {
+      border-color: var(--accent);
+      background: var(--bg-card);
+    }
+
+    .kpi-label {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .kpi-value {
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-variant-numeric: tabular-nums;
+      margin-top: 4px;
+    }
+
+    .kpi-note {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    nav.tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 12px;
+      margin-bottom: 20px;
+    }
+
+    nav.tabs a {
+      text-decoration: none;
+      color: var(--text-secondary);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 8px 14px;
+      font-size: 0.88rem;
+      font-weight: 500;
+    }
+
+    nav.tabs a.active {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+    }
+
+    label.field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+    }
+
+    input[type="text"],
+    select {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      padding: 7px 10px;
+      font-size: 0.86rem;
+      font-family: var(--font-sans);
+      min-width: 170px;
+      max-width: 100%;
+    }
+
+    input[type="text"] {
+      min-width: 260px;
+    }
+
+    input[type="text"]:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    button.btn {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      padding: 7px 12px;
+      font-size: 0.84rem;
+      cursor: pointer;
+    }
+
+    button.btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    button.btn-accent {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .toggle-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .version-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .version-row {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 14px 16px;
+    }
+
+    .version-row-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .version-id {
+      font-family: var(--font-mono);
+      font-size: 0.84rem;
+      color: var(--accent);
+      margin-right: 10px;
+    }
+
+    .version-title {
+      font-size: 0.98rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .version-time {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .delta-group {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+
+    .delta-stat {
+      padding: 2px 7px;
+      border-radius: 3px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-card);
+    }
+
+    .delta-added { color: var(--added); border-color: rgba(16, 185, 129, 0.35); background: var(--added-soft); }
+    .delta-changed { color: var(--changed); border-color: rgba(245, 158, 11, 0.35); background: var(--changed-soft); }
+    .delta-removed { color: var(--removed); border-color: rgba(244, 63, 94, 0.35); background: var(--removed-soft); }
+
+    .version-desc {
+      margin-top: 8px;
+      font-size: 0.83rem;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      background: var(--bg-base);
+      border-left: 2px solid var(--border-strong);
+      padding: 8px 10px;
+    }
+
+    .version-actions {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 0.82rem;
+    }
+
+    .action-link {
+      color: var(--accent);
+      text-decoration: none;
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      padding: 4px 10px;
+      background: var(--bg-card);
+    }
+
+    .action-link:hover { border-color: var(--accent); }
+
+    .diff-section { margin-top: 18px; }
+    .diff-section h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .entity-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+
+    .entity-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .kind-label {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      color: var(--text-secondary);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-strong);
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-right: 6px;
+    }
+
+    .status-flag {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .status-paused { color: var(--changed); border-color: rgba(245, 158, 11, 0.35); background: var(--changed-soft); }
+    .status-active { color: var(--added); border-color: rgba(16, 185, 129, 0.35); background: var(--added-soft); }
+    .status-danger { color: var(--removed); border-color: rgba(244, 63, 94, 0.35); background: var(--removed-soft); }
+
+    .entity-meta {
+      margin-top: 6px;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin-top: 10px;
+    }
+
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    table.data-table th,
+    table.data-table td {
+      border: 1px solid var(--border-subtle);
+      padding: 7px 9px;
+      text-align: left;
+      vertical-align: top;
+      overflow-wrap: break-word;
+    }
+
+    table.data-table th,
+    table.data-table td.nowrap {
+      white-space: nowrap;
+    }
+
+    table.data-table td code {
+      overflow-wrap: anywhere;
+    }
+
+    table.data-table th {
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    pre.code-block {
+      margin-top: 10px;
+      background: #070C0C;
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 10px;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      line-height: 1.45;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .diff-line-add { display: block; background: rgba(16, 185, 129, 0.14); color: #A7F3D0; }
+    .diff-line-del { display: block; background: rgba(244, 63, 94, 0.16); color: #FECDD3; }
+    .diff-line-hdr { display: block; color: var(--accent); }
+    .diff-line-ctx { display: block; color: var(--text-secondary); }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      min-width: 0;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 16px;
+    }
+
+    .panel h3 {
+      font-size: 0.96rem;
+      margin-bottom: 10px;
+      color: var(--accent);
+    }
+
+    .empty-state {
+      padding: 28px;
+      text-align: center;
+      color: var(--text-secondary);
+      background: var(--bg-surface);
+      border: 1px dashed var(--border-strong);
+      border-radius: 6px;
+    }
+
+    @media (max-width: 640px) {
+      .shell { padding: 14px 12px 40px; }
+      .header-meta { text-align: left; }
+      .panel-grid { grid-template-columns: 1fr; }
+      input[type="text"], select { min-width: 140px; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand-title">
+        <h1 id="hdr-container-name">GTM Container History Explorer</h1>
+        <div class="brand-sub" id="hdr-container-sub"></div>
+      </div>
+      <div class="header-meta" id="hdr-meta"></div>
+    </header>
+
+    <section class="kpi-grid" id="kpi-grid"></section>
+
+    <nav class="tabs" id="main-nav">
+      <a href="#/timeline" data-route="timeline">Timeline</a>
+      <a href="#/compare" data-route="compare">Compare Versions</a>
+      <a href="#/search" data-route="search">Global Search</a>
+      <a href="#/inspector" data-route="inspector">Rule Inspector</a>
+    </nav>
+
+    <main id="app-root"></main>
+  </div>
+
+  <script id="gtm-history-data" type="application/json">__GTM_HISTORY_DATA_JSON__</script>
+  <script>
+    (function () {
+      "use strict";
+
+      const DATA = JSON.parse(document.getElementById("gtm-history-data").textContent);
+      const VERSIONS = DATA.versions || [];
+      const VERSIONS_BY_ID = Object.fromEntries(VERSIONS.map(v => [String(v.versionId), v]));
+      const ENTITIES = DATA.entities || {};
+      const BLOBS = DATA.blobs || {};
+      const CONTAINER = DATA.container || {};
+      const VENDOR_DOMAINS = DATA.vendorDomainsLatest || [];
+
+      const NOISE_KEYS = new Set(["fingerprint", "path", "tagManagerUrl", "workspaceId"]);
+      const BUILTIN_TRIGGERS = {
+        "2147479553": "All Pages",
+        "2147479572": "Consent Initialization - All Pages",
+        "2147479573": "Initialization - All Pages"
+      };
+      const RESOURCE_KINDS = [
+        "tags", "triggers", "variables", "folders",
+        "customTemplates", "builtInVariables", "clients",
+        "transformations", "zones", "gtagConfigs"
+      ];
+      const ID_FIELD_BY_KIND = {
+        tags: "tagId",
+        triggers: "triggerId",
+        variables: "variableId",
+        folders: "folderId",
+        customTemplates: "templateId",
+        builtInVariables: "type",
+        clients: "clientId",
+        transformations: "transformationId",
+        zones: "zoneId",
+        gtagConfigs: "gtagConfigId"
+      };
+
+      const STORAGE_KEY = "gtm_history_viewer_prefs_v1";
+      const DEFAULT_PREFS = {
+        changedOnly: false,
+        ignoreNoise: true,
+        hidePausedDomains: false,
+        newestFirst: true,
+        snapshotInspectVersion: String(CONTAINER.latestVersion || (VERSIONS[VERSIONS.length - 1] && VERSIONS[VERSIONS.length - 1].versionId) || "")
+      };
+
+      function loadPrefs() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return { ...DEFAULT_PREFS };
+          return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+        } catch (e) {
+          return { ...DEFAULT_PREFS };
+        }
+      }
+
+      let PREFS = loadPrefs();
+      function savePrefs() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(PREFS));
+        } catch (e) {}
+      }
+
+      const IS_HTTP = window.location.protocol === "http:" || window.location.protocol === "https:";
+
+      function esc(str) {
+        return String(str == null ? "" : str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function routeHref(pathAndQuery) {
+        const clean = pathAndQuery.startsWith("/") ? pathAndQuery : "/" + pathAndQuery;
+        return IS_HTTP ? clean : "#" + clean;
+      }
+
+      let PENDING_FOCUS = null;
+      function navigate(pathAndQuery) {
+        const active = document.activeElement;
+        if (active && active.id && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) {
+          PENDING_FOCUS = {
+            id: active.id,
+            start: active.selectionStart,
+            end: active.selectionEnd
+          };
+        }
+        const clean = pathAndQuery.startsWith("/") ? pathAndQuery : "/" + pathAndQuery;
+        if (IS_HTTP) {
+          window.history.pushState({}, "", clean);
+          renderRoute();
+        } else {
+          window.location.hash = "#" + clean;
+        }
+      }
+
+      function currentRoute() {
+        if (IS_HTTP) {
+          const p = window.location.pathname || "/";
+          const q = window.location.search || "";
+          if (p === "/") {
+            window.history.replaceState({}, "", "/timeline");
+            return { tab: "timeline", params: new URLSearchParams("") };
+          }
+          const tab = p.replace(/^\/+/, "").split("/")[0] || "timeline";
+          return { tab, params: new URLSearchParams(q) };
+        }
+        const hash = (window.location.hash || "#/timeline").replace(/^#/, "");
+        const parts = hash.split("?");
+        const tab = (parts[0] || "/timeline").replace(/^\/+/, "").split("/")[0] || "timeline";
+        return { tab, params: new URLSearchParams(parts[1] || "") };
+      }
+
+      function hydrateEntity(hash) {
+        const raw = ENTITIES[hash];
+        if (!raw) return {};
+        if (raw.templateDataHash && BLOBS[raw.templateDataHash] !== undefined) {
+          const copy = { ...raw, templateData: BLOBS[raw.templateDataHash] };
+          delete copy.templateDataHash;
+          return copy;
+        }
+        return raw;
+      }
+
+      function getVersionEntities(ver) {
+        const result = {};
+        for (const kind of RESOURCE_KINDS) {
+          const hashes = (ver.refs && ver.refs[kind]) || [];
+          result[kind] = hashes.map(hydrateEntity);
+        }
+        return result;
+      }
+
+      function buildLookup(verEntities) {
+        const triggers = { ...BUILTIN_TRIGGERS };
+        for (const t of verEntities.triggers || []) {
+          if (t.triggerId != null) triggers[String(t.triggerId)] = t.name || String(t.triggerId);
+        }
+        const folders = {};
+        for (const f of verEntities.folders || []) {
+          if (f.folderId != null) folders[String(f.folderId)] = f.name || String(f.folderId);
+        }
+        return { triggers, folders };
+      }
+
+      function entityId(kind, item) {
+        const key = ID_FIELD_BY_KIND[kind] || "name";
+        if (item[key] != null && String(item[key]) !== "") return String(item[key]);
+        return String(item.name || item.path || "");
+      }
+
+      function stripNoise(obj) {
+        if (!PREFS.ignoreNoise) return obj;
+        const out = {};
+        for (const k of Object.keys(obj).sort()) {
+          if (!NOISE_KEYS.has(k)) out[k] = obj[k];
+        }
+        return out;
+      }
+
+      function stableStringify(val) {
+        if (Array.isArray(val)) return "[" + val.map(stableStringify).join(",") + "]";
+        if (val && typeof val === "object") {
+          const keys = Object.keys(val).sort();
+          return "{" + keys.map(k => JSON.stringify(k) + ":" + stableStringify(val[k])).join(",") + "}";
+        }
+        return JSON.stringify(val);
+      }
+
+      function simplifyParamValue(v) {
+        if (Array.isArray(v)) {
+          return v.map(el => {
+            if (el && typeof el === "object" && el.type === "map" && Array.isArray(el.map)) {
+              const row = {};
+              for (const kv of el.map) {
+                if (kv && kv.key != null) row[kv.key] = simplifyParamValue(kv.value !== undefined ? kv.value : (kv.list !== undefined ? kv.list : kv.map));
+              }
+              return row;
+            }
+            return simplifyParamValue(el);
+          });
+        }
+        if (v && typeof v === "object") {
+          const out = {};
+          for (const k of Object.keys(v).sort()) out[k] = simplifyParamValue(v[k]);
+          return out;
+        }
+        return v;
+      }
+
+      function extractParams(item) {
+        const out = {};
+        for (const p of item.parameter || []) {
+          if (!p || !p.key) continue;
+          if ("value" in p) out[p.key] = p.value;
+          else if ("list" in p) out[p.key] = simplifyParamValue(p.list);
+          else if ("map" in p) out[p.key] = simplifyParamValue(p.map);
+          else out[p.key] = p;
+        }
+        return out;
+      }
+
+      function extractCode(kind, item) {
+        if (kind === "tags") {
+          const p = extractParams(item);
+          if (typeof p.html === "string") return { ext: ".html", code: p.html };
+        }
+        if (kind === "variables") {
+          const p = extractParams(item);
+          if (typeof p.javascript === "string") return { ext: ".js", code: p.javascript };
+        }
+        if (kind === "customTemplates" && typeof item.templateData === "string") {
+          return { ext: ".tpl", code: item.templateData };
+        }
+        return null;
+      }
+
+      function resolveTriggerList(ids, triggerLookup) {
+        if (!ids) return [];
+        const arr = Array.isArray(ids) ? ids : [ids];
+        return arr.map(id => {
+          const s = String(id);
+          return triggerLookup[s] ? `${s} (${triggerLookup[s]})` : s;
+        });
+      }
+
+      function lineDiff(beforeText, afterText) {
+        const a = String(beforeText || "").split("\n");
+        const b = String(afterText || "").split("\n");
+        const maxCells = 650000;
+        if (a.length * b.length > maxCells) {
+          return [
+            { type: "hdr", text: `@@ Large file summary: ${a.length} lines -> ${b.length} lines @@` },
+            ...a.slice(0, 40).map(l => ({ type: "del", text: "- " + l })),
+            ...b.slice(0, 40).map(l => ({ type: "add", text: "+ " + l }))
+          ];
+        }
+        const m = a.length, n = b.length;
+        const dp = Array.from({ length: m + 1 }, () => new Int32Array(n + 1));
+        for (let i = m - 1; i >= 0; i--) {
+          for (let j = n - 1; j >= 0; j--) {
+            dp[i][j] = a[i] === b[j] ? 1 + dp[i + 1][j + 1] : Math.max(dp[i + 1][j], dp[i][j + 1]);
+          }
+        }
+        const ops = [];
+        let i = 0, j = 0;
+        while (i < m && j < n) {
+          if (a[i] === b[j]) { ops.push({ type: "ctx", text: "  " + a[i] }); i++; j++; }
+          else if (dp[i + 1][j] >= dp[i][j + 1]) { ops.push({ type: "del", text: "- " + a[i] }); i++; }
+          else { ops.push({ type: "add", text: "+ " + b[j] }); j++; }
+        }
+        while (i < m) { ops.push({ type: "del", text: "- " + a[i] }); i++; }
+        while (j < n) { ops.push({ type: "add", text: "+ " + b[j] }); j++; }
+
+        // Trim unchanged stretches with context=3 lines
+        const out = [];
+        const keep = new Uint8Array(ops.length);
+        for (let k = 0; k < ops.length; k++) {
+          if (ops[k].type !== "ctx") {
+            for (let c = Math.max(0, k - 3); c <= Math.min(ops.length - 1, k + 3); c++) keep[c] = 1;
+          }
+        }
+        let skipping = false;
+        for (let k = 0; k < ops.length; k++) {
+          if (keep[k]) {
+            if (skipping) { out.push({ type: "hdr", text: "..." }); skipping = false; }
+            out.push(ops[k]);
+          } else {
+            skipping = true;
+          }
+        }
+        return out;
+      }
+
+      function diffVersions(vFromId, vToId) {
+        const bVer = VERSIONS_BY_ID[String(vFromId)];
+        const aVer = VERSIONS_BY_ID[String(vToId)];
+        if (!bVer || !aVer) return null;
+
+        const bEnts = getVersionEntities(bVer);
+        const aEnts = getVersionEntities(aVer);
+        const bLk = buildLookup(bEnts);
+        const aLk = buildLookup(aEnts);
+
+        const added = [], removed = [], changed = [];
+        let unchangedCount = 0;
+
+        for (const kind of RESOURCE_KINDS) {
+          const bMap = Object.fromEntries((bEnts[kind] || []).map(it => [entityId(kind, it), it]));
+          const aMap = Object.fromEntries((aEnts[kind] || []).map(it => [entityId(kind, it), it]));
+
+          for (const eid of Object.keys(aMap).sort()) {
+            const aItem = aMap[eid];
+            const bItem = bMap[eid];
+            if (!bItem) {
+              added.push({
+                kind,
+                id: eid,
+                name: aItem.name || eid,
+                type: aItem.type || "",
+                paused: !!aItem.paused,
+                folderName: aLk.folders[String(aItem.parentFolderId || "")] || "",
+                firingTriggers: resolveTriggerList(aItem.firingTriggerId, aLk.triggers),
+                blockingTriggers: resolveTriggerList(aItem.blockingTriggerId, aLk.triggers),
+                codeInfo: extractCode(kind, aItem),
+                item: stripNoise(aItem)
+              });
+              continue;
+            }
+
+            const bClean = stripNoise(bItem);
+            const aClean = stripNoise(aItem);
+            if (stableStringify(bClean) === stableStringify(aClean)) {
+              unchangedCount++;
+              continue;
+            }
+
+            const fieldChanges = [];
+            let codeDiffLines = null;
+            const keys = Array.from(new Set([...Object.keys(bClean), ...Object.keys(aClean)])).sort();
+            for (const key of keys) {
+              if (stableStringify(bClean[key]) === stableStringify(aClean[key])) continue;
+              if (key === "parameter") {
+                const bp = extractParams(bClean);
+                const ap = extractParams(aClean);
+                for (const pk of Array.from(new Set([...Object.keys(bp), ...Object.keys(ap)])).sort()) {
+                  if (stableStringify(bp[pk]) === stableStringify(ap[pk])) continue;
+                  if ((pk === "html" || pk === "javascript") && (typeof bp[pk] === "string" || typeof ap[pk] === "string")) {
+                    codeDiffLines = lineDiff(bp[pk] || "", ap[pk] || "");
+                    fieldChanges.push({
+                      field: `parameter.${pk}`,
+                      before: bp[pk] != null ? `(${String(bp[pk]).length} chars)` : null,
+                      after: ap[pk] != null ? `(${String(ap[pk]).length} chars)` : null
+                    });
+                  } else {
+                    fieldChanges.push({ field: `parameter.${pk}`, before: bp[pk], after: ap[pk] });
+                  }
+                }
+              } else if (key === "templateData") {
+                codeDiffLines = lineDiff(bClean[key] || "", aClean[key] || "");
+                fieldChanges.push({
+                  field: "templateData",
+                  before: bClean[key] != null ? `(${String(bClean[key]).length} chars)` : null,
+                  after: aClean[key] != null ? `(${String(aClean[key]).length} chars)` : null
+                });
+              } else if (key === "firingTriggerId" || key === "blockingTriggerId") {
+                fieldChanges.push({
+                  field: key,
+                  before: resolveTriggerList(bClean[key], bLk.triggers),
+                  after: resolveTriggerList(aClean[key], aLk.triggers)
+                });
+              } else if (key === "parentFolderId") {
+                fieldChanges.push({
+                  field: key,
+                  before: bClean[key] ? `${bClean[key]} (${bLk.folders[String(bClean[key])] || ""})` : null,
+                  after: aClean[key] ? `${aClean[key]} (${aLk.folders[String(aClean[key])] || ""})` : null
+                });
+              } else {
+                fieldChanges.push({ field: key, before: bClean[key], after: aClean[key] });
+              }
+            }
+
+            if (fieldChanges.length > 0) {
+              changed.push({
+                kind,
+                id: eid,
+                name: aItem.name || eid,
+                type: aItem.type || "",
+                pausedBefore: !!bItem.paused,
+                pausedAfter: !!aItem.paused,
+                folderName: aLk.folders[String(aItem.parentFolderId || "")] || "",
+                firingTriggers: resolveTriggerList(aItem.firingTriggerId, aLk.triggers),
+                fieldChanges,
+                codeDiffLines
+              });
+            }
+          }
+
+          for (const eid of Object.keys(bMap).sort()) {
+            if (!aMap[eid]) {
+              const bItem = bMap[eid];
+              removed.push({
+                kind,
+                id: eid,
+                name: bItem.name || eid,
+                type: bItem.type || "",
+                paused: !!bItem.paused,
+                folderName: bLk.folders[String(bItem.parentFolderId || "")] || "",
+                firingTriggers: resolveTriggerList(bItem.firingTriggerId, bLk.triggers),
+                codeInfo: extractCode(kind, bItem),
+                item: stripNoise(bItem)
+              });
+            }
+          }
+        }
+
+        return {
+          before: bVer,
+          after: aVer,
+          added,
+          removed,
+          changed,
+          unchangedCount
+        };
+      }
+
+      function renderHeaderAndKpis() {
+        document.getElementById("hdr-container-name").textContent =
+          `${CONTAINER.containerName || "GTM Container"} History`;
+        document.getElementById("hdr-container-sub").textContent =
+          `${CONTAINER.publicId || ""} | Account ${CONTAINER.accountId || ""} | Container ${CONTAINER.containerId || ""}`;
+        document.getElementById("hdr-meta").innerHTML =
+          `<div>Latest: <strong>v${esc(CONTAINER.latestVersion)}</strong> (${esc(CONTAINER.latestTimestampUtc || "unknown")})</div>` +
+          `<div>Generated: ${esc(DATA.generatedAtUtc || "")}</div>`;
+
+        const latestId = CONTAINER.latestVersion || 1;
+        const prevId = latestId > 1 ? latestId - 1 : latestId;
+        const latestVer = VERSIONS_BY_ID[String(latestId)] || {};
+        const d = latestVer.deltaFromPrev || { added: 0, changed: 0, removed: 0 };
+        const domainCount = VENDOR_DOMAINS.length;
+
+        const cards = [
+          {
+            href: routeHref("/timeline"),
+            label: "Archived Versions",
+            value: CONTAINER.totalVersions || VERSIONS.length,
+            note: `v${VERSIONS[0] ? VERSIONS[0].versionId : 1} to v${latestId}`
+          },
+          {
+            href: routeHref(`/compare?from=${prevId}&to=${latestId}`),
+            label: `Latest Delta v${prevId} -> v${latestId}`,
+            value: `+${d.added} / ~${d.changed} / -${d.removed}`,
+            note: latestVer.name || "Inspect comparison"
+          },
+          {
+            href: routeHref("/search?status=active&kind=tags"),
+            label: "Active Tags",
+            value: CONTAINER.activeTags ?? 0,
+            note: `Total ${(CONTAINER.latestCounts && CONTAINER.latestCounts.tags) || 0} tags`
+          },
+          {
+            href: routeHref("/search?status=paused&kind=tags"),
+            label: "Paused Tags",
+            value: CONTAINER.pausedTags ?? 0,
+            note: "Dormant preserved configs"
+          },
+          {
+            href: routeHref("/inspector"),
+            label: "Custom HTML Domains",
+            value: domainCount,
+            note: "Inspect active and paused tags"
+          }
+        ];
+
+        document.getElementById("kpi-grid").innerHTML = cards.map(c =>
+          `<a class="kpi-card" href="${esc(c.href)}" data-nav="${esc(c.href)}">` +
+          `<div class="kpi-label">${esc(c.label)}</div>` +
+          `<div class="kpi-value">${esc(c.value)}</div>` +
+          `<div class="kpi-note">${esc(c.note)}</div>` +
+          `</a>`
+        ).join("");
+      }
+
+      function renderTimeline(params) {
+        const filterQ = (params.get("q") || "").trim().toLowerCase();
+        const list = PREFS.newestFirst ? [...VERSIONS].reverse() : [...VERSIONS];
+        const filtered = list.filter(v => {
+          const d = v.deltaFromPrev || { added: 0, changed: 0, removed: 0 };
+          if (PREFS.changedOnly && d.added === 0 && d.changed === 0 && d.removed === 0 && v.versionId !== 1) return false;
+          if (filterQ) {
+            const hay = `${v.versionId} ${v.name} ${v.description}`.toLowerCase();
+            if (!hay.includes(filterQ)) return false;
+          }
+          return true;
+        });
+
+        let html = `
+          <div class="toolbar">
+            <label class="field">Filter Version Notes
+              <input id="tl-search" type="text" placeholder="Search version title or notes..." value="${esc(filterQ)}">
+            </label>
+            <label class="toggle-row">
+              <input id="tl-changed-only" type="checkbox" ${PREFS.changedOnly ? "checked" : ""}> Changed Versions Only
+            </label>
+            <label class="toggle-row">
+              <input id="tl-newest-first" type="checkbox" ${PREFS.newestFirst ? "checked" : ""}> Newest First
+            </label>
+            <span style="margin-left:auto;font-size:0.82rem;color:var(--text-secondary);">Showing ${filtered.length} of ${VERSIONS.length} versions</span>
+          </div>
+          <div class="version-list">
+        `;
+
+        if (filtered.length === 0) {
+          html += `<div class="empty-state">No versions matched the current filter.</div>`;
+        } else {
+          for (const v of filtered) {
+            const d = v.deltaFromPrev || { added: 0, changed: 0, removed: 0 };
+            const prev = Math.max(1, v.versionId - 1);
+            const c = v.counts || {};
+            html += `
+              <article class="version-row">
+                <div class="version-row-top">
+                  <div>
+                    <span class="version-id">v${String(v.versionId).padStart(2, "0")}</span>
+                    <span class="version-title">${esc(v.name || "Untitled version")}</span>
+                    <div class="version-time">${esc(v.timestampUtc || "Timestamp unavailable")} | Tags ${c.tags || 0}, Triggers ${c.triggers || 0}, Variables ${c.variables || 0}, Templates ${c.customTemplates || 0}</div>
+                  </div>
+                  <div class="delta-group">
+                    <span class="delta-stat ${d.added ? "delta-added" : ""}">+${d.added} added</span>
+                    <span class="delta-stat ${d.changed ? "delta-changed" : ""}">~${d.changed} modified</span>
+                    <span class="delta-stat ${d.removed ? "delta-removed" : ""}">-${d.removed} removed</span>
+                  </div>
+                </div>
+                ${v.description ? `<div class="version-desc">${esc(v.description)}</div>` : ""}
+                <div class="version-actions">
+                  ${v.versionId > 1 ? `<a class="action-link" href="${esc(routeHref(`/compare?from=${prev}&to=${v.versionId}`))}">Compare vs v${prev}</a>` : ""}
+                  <a class="action-link" href="${esc(routeHref(`/compare?from=${v.versionId}&to=${CONTAINER.latestVersion}`))}">Compare vs Latest</a>
+                  <a class="action-link" href="${esc(routeHref(`/inspector?snapshot=${v.versionId}`))}">Browse Snapshot Resources</a>
+                </div>
+              </article>
+            `;
+          }
+        }
+        html += `</div>`;
+        document.getElementById("app-root").innerHTML = html;
+
+        document.getElementById("tl-search").addEventListener("input", e => {
+          const val = e.target.value;
+          const p = new URLSearchParams(params);
+          if (val) p.set("q", val); else p.delete("q");
+          const qs = p.toString();
+          navigate("/timeline" + (qs ? "?" + qs : ""));
+        });
+        document.getElementById("tl-changed-only").addEventListener("change", e => {
+          PREFS.changedOnly = e.target.checked;
+          savePrefs();
+          renderRoute();
+        });
+        document.getElementById("tl-newest-first").addEventListener("change", e => {
+          PREFS.newestFirst = e.target.checked;
+          savePrefs();
+          renderRoute();
+        });
+      }
+
+      function renderCompare(params) {
+        const latest = String(CONTAINER.latestVersion || (VERSIONS[VERSIONS.length - 1] && VERSIONS[VERSIONS.length - 1].versionId) || "");
+        const defaultFrom = String(Math.max(1, Number(latest) - 1));
+        const vFrom = params.get("from") && VERSIONS_BY_ID[params.get("from")] ? params.get("from") : defaultFrom;
+        const vTo = params.get("to") && VERSIONS_BY_ID[params.get("to")] ? params.get("to") : latest;
+
+        const diff = diffVersions(vFrom, vTo);
+        const optionsFrom = VERSIONS.map(v =>
+          `<option value="${v.versionId}" ${String(v.versionId) === vFrom ? "selected" : ""}>v${String(v.versionId).padStart(2, "0")} — ${esc((v.name || "Untitled").slice(0, 52))}</option>`
+        ).join("");
+        const optionsTo = VERSIONS.map(v =>
+          `<option value="${v.versionId}" ${String(v.versionId) === vTo ? "selected" : ""}>v${String(v.versionId).padStart(2, "0")} — ${esc((v.name || "Untitled").slice(0, 52))}</option>`
+        ).join("");
+
+        let html = `
+          <div class="toolbar">
+            <label class="field">From Version
+              <select id="cmp-from">${optionsFrom}</select>
+            </label>
+            <button type="button" class="btn" id="cmp-swap">Swap</button>
+            <label class="field">To Version
+              <select id="cmp-to">${optionsTo}</select>
+            </label>
+            <label class="toggle-row">
+              <input id="cmp-ignore-noise" type="checkbox" ${PREFS.ignoreNoise ? "checked" : ""}> Ignore Volatile Metadata
+            </label>
+            <button type="button" class="btn btn-accent" id="cmp-export-json">Export Diff</button>
+          </div>
+        `;
+
+        if (!diff) {
+          html += `<div class="empty-state">Select valid container versions to compare.</div>`;
+          document.getElementById("app-root").innerHTML = html;
+          return;
+        }
+
+        html += `
+          <div class="version-row" style="margin-bottom:16px;">
+            <div class="version-row-top">
+              <div>
+                <div class="version-title">Comparing v${esc(vFrom)} to v${esc(vTo)}</div>
+                <div class="version-time">Before: ${esc(diff.before.name || "Untitled")} (${esc(diff.before.timestampUtc || "-")})<br>After: ${esc(diff.after.name || "Untitled")} (${esc(diff.after.timestampUtc || "-")})</div>
+              </div>
+              <div class="delta-group">
+                <span class="delta-stat delta-added">+${diff.added.length} added</span>
+                <span class="delta-stat delta-changed">~${diff.changed.length} modified</span>
+                <span class="delta-stat delta-removed">-${diff.removed.length} removed</span>
+                <span class="delta-stat">${diff.unchangedCount} unchanged</span>
+              </div>
+            </div>
+            ${diff.after.description ? `<div class="version-desc">${esc(diff.after.description)}</div>` : ""}
+          </div>
+        `;
+
+        if (diff.added.length === 0 && diff.changed.length === 0 && diff.removed.length === 0) {
+          html += `<div class="empty-state">Zero semantic differences detected between v${esc(vFrom)} and v${esc(vTo)}.</div>`;
+        } else {
+          if (diff.added.length > 0) {
+            html += `<div class="diff-section"><h3 style="color:var(--added);">Added Resources (${diff.added.length})</h3>`;
+            for (const item of diff.added) {
+              html += `
+                <article class="entity-card">
+                  <div class="entity-head">
+                    <div>
+                      <span class="kind-label">${esc(item.kind)}</span>
+                      <span class="version-id">#${esc(item.id)}</span>
+                      <strong>${esc(item.name)}</strong>
+                    </div>
+                    <span class="status-flag status-active">${esc(item.type || "resource")}</span>
+                  </div>
+                  <div class="entity-meta">
+                    ${item.folderName ? `Folder: ${esc(item.folderName)} | ` : ""}
+                    ${item.firingTriggers.length ? `Firing: ${esc(item.firingTriggers.join(", "))}` : ""}
+                    ${item.blockingTriggers.length ? ` | Blocking: ${esc(item.blockingTriggers.join(", "))}` : ""}
+                  </div>
+                  ${item.codeInfo ? `<pre class="code-block">${esc(item.codeInfo.code)}</pre>` : `<pre class="code-block">${esc(JSON.stringify(item.item, null, 2))}</pre>`}
+                </article>
+              `;
+            }
+            html += `</div>`;
+          }
+
+          if (diff.removed.length > 0) {
+            html += `<div class="diff-section"><h3 style="color:var(--removed);">Removed Resources (${diff.removed.length})</h3>`;
+            for (const item of diff.removed) {
+              html += `
+                <article class="entity-card">
+                  <div class="entity-head">
+                    <div>
+                      <span class="kind-label">${esc(item.kind)}</span>
+                      <span class="version-id">#${esc(item.id)}</span>
+                      <strong>${esc(item.name)}</strong>
+                    </div>
+                    <span class="status-flag status-danger">${esc(item.type || "removed")}</span>
+                  </div>
+                  <div class="entity-meta">
+                    ${item.folderName ? `Folder: ${esc(item.folderName)} | ` : ""}
+                    ${item.firingTriggers.length ? `Previous Firing: ${esc(item.firingTriggers.join(", "))}` : ""}
+                  </div>
+                  ${item.codeInfo ? `<pre class="code-block">${esc(item.codeInfo.code)}</pre>` : `<pre class="code-block">${esc(JSON.stringify(item.item, null, 2))}</pre>`}
+                </article>
+              `;
+            }
+            html += `</div>`;
+          }
+
+          if (diff.changed.length > 0) {
+            html += `<div class="diff-section"><h3 style="color:var(--changed);">Modified Resources (${diff.changed.length})</h3>`;
+            for (const ch of diff.changed) {
+              const rows = ch.fieldChanges.map(fc => `
+                <tr>
+                  <td class="nowrap"><code>${esc(fc.field)}</code></td>
+                  <td><code>${esc(JSON.stringify(fc.before))}</code></td>
+                  <td><code>${esc(JSON.stringify(fc.after))}</code></td>
+                </tr>
+              `).join("");
+
+              let codeHtml = "";
+              if (ch.codeDiffLines && ch.codeDiffLines.length > 0) {
+                const linesHtml = ch.codeDiffLines.map(line => {
+                  const cls = line.type === "add" ? "diff-line-add" : (line.type === "del" ? "diff-line-del" : (line.type === "hdr" ? "diff-line-hdr" : "diff-line-ctx"));
+                  return `<span class="${cls}">${esc(line.text)}</span>`;
+                }).join("");
+                codeHtml = `<pre class="code-block">${linesHtml}</pre>`;
+              }
+
+              html += `
+                <article class="entity-card">
+                  <div class="entity-head">
+                    <div>
+                      <span class="kind-label">${esc(ch.kind)}</span>
+                      <span class="version-id">#${esc(ch.id)}</span>
+                      <strong>${esc(ch.name)}</strong>
+                    </div>
+                    <span class="status-flag ${ch.pausedAfter ? "status-paused" : "status-active"}">${ch.pausedAfter ? "paused" : (ch.type || "active")}</span>
+                  </div>
+                  <div class="entity-meta">
+                    ${ch.folderName ? `Folder: ${esc(ch.folderName)} | ` : ""}
+                    ${ch.firingTriggers.length ? `Firing: ${esc(ch.firingTriggers.join(", "))}` : ""}
+                  </div>
+                  <div class="table-wrap"><table class="data-table">
+                    <thead><tr><th>Field</th><th>Before (v${esc(vFrom)})</th><th>After (v${esc(vTo)})</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                  </table></div>
+                  ${codeHtml}
+                </article>
+              `;
+            }
+            html += `</div>`;
+          }
+        }
+
+        document.getElementById("app-root").innerHTML = html;
+
+        document.getElementById("cmp-from").addEventListener("change", e => {
+          navigate(`/compare?from=${e.target.value}&to=${vTo}`);
+        });
+        document.getElementById("cmp-to").addEventListener("change", e => {
+          navigate(`/compare?from=${vFrom}&to=${e.target.value}`);
+        });
+        document.getElementById("cmp-swap").addEventListener("click", () => {
+          navigate(`/compare?from=${vTo}&to=${vFrom}`);
+        });
+        document.getElementById("cmp-ignore-noise").addEventListener("change", e => {
+          PREFS.ignoreNoise = e.target.checked;
+          savePrefs();
+          renderRoute();
+        });
+        document.getElementById("cmp-export-json").addEventListener("click", () => {
+          const blob = new Blob([JSON.stringify(diff, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `gtm_${CONTAINER.publicId || "container"}_v${vFrom}_to_v${vTo}_diff.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+      }
+
+      function renderSearch(params) {
+        const q = (params.get("q") || "").trim();
+        const scope = params.get("scope") || "latest";
+        const kindFilter = params.get("kind") || "all";
+        const statusFilter = params.get("status") || "all";
+
+        const searchPool = scope === "all" ? [...VERSIONS].reverse() : [VERSIONS[VERSIONS.length - 1]].filter(Boolean);
+        const qLower = q.toLowerCase();
+        const results = [];
+
+        for (const ver of searchPool) {
+          const ents = getVersionEntities(ver);
+          const lk = buildLookup(ents);
+          for (const kind of RESOURCE_KINDS) {
+            if (kindFilter !== "all" && kind !== kindFilter) continue;
+            for (const item of ents[kind] || []) {
+              const isPaused = !!item.paused;
+              if (statusFilter === "paused" && !isPaused) continue;
+              if (statusFilter === "active" && isPaused) continue;
+              const clean = stripNoise(item);
+              const hay = JSON.stringify(clean).toLowerCase();
+              if (!qLower || hay.includes(qLower)) {
+                results.push({
+                  versionId: ver.versionId,
+                  timestampUtc: ver.timestampUtc,
+                  kind,
+                  id: entityId(kind, item),
+                  name: item.name || entityId(kind, item),
+                  type: item.type || "",
+                  paused: isPaused,
+                  folderName: lk.folders[String(item.parentFolderId || "")] || "",
+                  firingTriggers: resolveTriggerList(item.firingTriggerId, lk.triggers),
+                  codeInfo: extractCode(kind, item),
+                  item: clean
+                });
+                if (results.length >= 200) break;
+              }
+            }
+            if (results.length >= 200) break;
+          }
+          if (results.length >= 200) break;
+        }
+
+        const kindOpts = ["all", ...RESOURCE_KINDS].map(k =>
+          `<option value="${k}" ${kindFilter === k ? "selected" : ""}>${k === "all" ? "All Types" : k}</option>`
+        ).join("");
+
+        let html = `
+          <div class="toolbar">
+            <label class="field">Search Query
+              <input id="srch-q" type="text" placeholder="Search tag, trigger, variable, ID, G-, AW-, domain, script..." value="${esc(q)}">
+            </label>
+            <label class="field">Version Scope
+              <select id="srch-scope">
+                <option value="latest" ${scope === "latest" ? "selected" : ""}>Latest (v${esc(CONTAINER.latestVersion)})</option>
+                <option value="all" ${scope === "all" ? "selected" : ""}>All ${VERSIONS.length} Versions</option>
+              </select>
+            </label>
+            <label class="field">Resource Type
+              <select id="srch-kind">${kindOpts}</select>
+            </label>
+            <label class="field">State
+              <select id="srch-status">
+                <option value="all" ${statusFilter === "all" ? "selected" : ""}>All States</option>
+                <option value="active" ${statusFilter === "active" ? "selected" : ""}>Active Only</option>
+                <option value="paused" ${statusFilter === "paused" ? "selected" : ""}>Paused Only</option>
+              </select>
+            </label>
+            <span style="margin-left:auto;font-size:0.82rem;color:var(--text-secondary);">${results.length} matches${results.length === 200 ? " (capped at 200)" : ""}</span>
+          </div>
+        `;
+
+        if (results.length === 0) {
+          html += `<div class="empty-state">No resources matched "${esc(q)}". Try searching a vendor name, tag ID, measurement ID, or switching scope to All Versions.</div>`;
+        } else {
+          for (const r of results) {
+            html += `
+              <article class="entity-card">
+                <div class="entity-head">
+                  <div>
+                    <span class="kind-label">v${esc(r.versionId)}</span>
+                    <span class="kind-label">${esc(r.kind)}</span>
+                    <span class="version-id">#${esc(r.id)}</span>
+                    <strong>${esc(r.name)}</strong>
+                  </div>
+                  <span class="status-flag ${r.paused ? "status-paused" : "status-active"}">${r.paused ? "paused" : (r.type || "active")}</span>
+                </div>
+                <div class="entity-meta">
+                  ${r.timestampUtc ? `${esc(r.timestampUtc)} | ` : ""}
+                  ${r.folderName ? `Folder: ${esc(r.folderName)} | ` : ""}
+                  ${r.firingTriggers.length ? `Firing: ${esc(r.firingTriggers.join(", "))}` : ""}
+                </div>
+                ${r.codeInfo ? `<pre class="code-block">${esc(r.codeInfo.code)}</pre>` : `<pre class="code-block">${esc(JSON.stringify(r.item, null, 2))}</pre>`}
+              </article>
+            `;
+          }
+        }
+
+        document.getElementById("app-root").innerHTML = html;
+
+        const updateSearch = () => {
+          const p = new URLSearchParams();
+          const nq = document.getElementById("srch-q").value.trim();
+          const ns = document.getElementById("srch-scope").value;
+          const nk = document.getElementById("srch-kind").value;
+          const nt = document.getElementById("srch-status").value;
+          if (nq) p.set("q", nq);
+          if (ns !== "latest") p.set("scope", ns);
+          if (nk !== "all") p.set("kind", nk);
+          if (nt !== "all") p.set("status", nt);
+          const qs = p.toString();
+          navigate("/search" + (qs ? "?" + qs : ""));
+        };
+
+        document.getElementById("srch-q").addEventListener("input", updateSearch);
+        document.getElementById("srch-scope").addEventListener("change", updateSearch);
+        document.getElementById("srch-kind").addEventListener("change", updateSearch);
+        document.getElementById("srch-status").addEventListener("change", updateSearch);
+      }
+
+      function computeLifecycleTrace(query) {
+        const q = query.trim().toLowerCase();
+        if (!q || VERSIONS.length === 0) return [];
+        const events = [];
+        const first = VERSIONS[0];
+        const firstEnts = getVersionEntities(first);
+        for (const kind of RESOURCE_KINDS) {
+          for (const item of firstEnts[kind] || []) {
+            if (JSON.stringify(stripNoise(item)).toLowerCase().includes(q)) {
+              events.push({
+                versionId: first.versionId,
+                timestampUtc: first.timestampUtc,
+                action: "baseline",
+                kind,
+                id: entityId(kind, item),
+                name: item.name || entityId(kind, item),
+                detail: item.paused ? "paused in baseline" : "active in baseline"
+              });
+            }
+          }
+        }
+        for (let idx = 1; idx < VERSIONS.length; idx++) {
+          const prevV = VERSIONS[idx - 1];
+          const curV = VERSIONS[idx];
+          const d = diffVersions(prevV.versionId, curV.versionId);
+          for (const a of d.added) {
+            if (JSON.stringify(a).toLowerCase().includes(q)) {
+              events.push({ versionId: curV.versionId, timestampUtc: curV.timestampUtc, action: "added", kind: a.kind, id: a.id, name: a.name, detail: a.type });
+            }
+          }
+          for (const r of d.removed) {
+            if (JSON.stringify(r).toLowerCase().includes(q)) {
+              events.push({ versionId: curV.versionId, timestampUtc: curV.timestampUtc, action: "removed", kind: r.kind, id: r.id, name: r.name, detail: r.type });
+            }
+          }
+          for (const ch of d.changed) {
+            if (JSON.stringify(ch).toLowerCase().includes(q)) {
+              const fields = ch.fieldChanges.map(f => f.field).join(", ");
+              events.push({ versionId: curV.versionId, timestampUtc: curV.timestampUtc, action: "modified", kind: ch.kind, id: ch.id, name: ch.name, detail: fields });
+            }
+          }
+        }
+        return events;
+      }
+
+      function renderInspector(params) {
+        const snapVid = params.get("snapshot") && VERSIONS_BY_ID[params.get("snapshot")]
+          ? params.get("snapshot")
+          : String(PREFS.snapshotInspectVersion || CONTAINER.latestVersion);
+        const traceQ = (params.get("trace") || "Enhanced Conversion").trim();
+        const traceEvents = traceQ ? computeLifecycleTrace(traceQ) : [];
+
+        const snapVer = VERSIONS_BY_ID[snapVid] || VERSIONS[VERSIONS.length - 1];
+        const snapEnts = snapVer ? getVersionEntities(snapVer) : {};
+
+        const filteredDomains = VENDOR_DOMAINS.filter(row => !PREFS.hidePausedDomains || !row.paused);
+        const domainRows = filteredDomains.map(row => {
+          const domNames = (row.domains || []).map(d => d.domain).join(", ");
+          const cls = (row.domains || []).map(d => d.classification).join(", ");
+          const hasAlert = (row.domains || []).some(d => d.classification === "hijacked_or_deprecated");
+          return `
+            <tr>
+              <td><code>${esc(row.tagId)}</code></td>
+              <td>${esc(row.tagName)}</td>
+              <td><span class="status-flag ${row.paused ? "status-paused" : "status-active"}">${row.paused ? "paused" : "active"}</span></td>
+              <td><code>${esc(domNames)}</code></td>
+              <td><span class="status-flag ${hasAlert ? "status-danger" : ""}">${esc(cls)}</span></td>
+            </tr>
+          `;
+        }).join("");
+
+        const snapOpts = VERSIONS.map(v =>
+          `<option value="${v.versionId}" ${String(v.versionId) === snapVid ? "selected" : ""}>v${String(v.versionId).padStart(2, "0")} — ${esc((v.name || "Untitled").slice(0, 48))}</option>`
+        ).join("");
+
+        const snapRows = RESOURCE_KINDS.filter(k => (snapEnts[k] || []).length > 0).map(k =>
+          `<tr><td class="nowrap"><code>${esc(k)}</code></td><td class="nowrap">${(snapEnts[k] || []).length}</td><td>${(snapEnts[k] || []).slice(0, 6).map(it => esc(it.name || entityId(k, it))).join(", ")}${(snapEnts[k] || []).length > 6 ? " ..." : ""}</td></tr>`
+        ).join("");
+
+        const traceRows = traceEvents.map(ev => {
+          const cls = ev.action === "added" ? "status-active" : (ev.action === "removed" ? "status-danger" : (ev.action === "modified" ? "status-paused" : ""));
+          return `
+            <tr>
+              <td class="nowrap"><a class="action-link" href="${esc(routeHref(`/compare?from=${Math.max(1, ev.versionId - 1)}&to=${ev.versionId}`))}">v${esc(ev.versionId)}</a></td>
+              <td class="nowrap"><code>${esc(ev.timestampUtc || "-")}</code></td>
+              <td class="nowrap"><span class="status-flag ${cls}">${esc(ev.action)}</span></td>
+              <td class="nowrap"><code>${esc(ev.kind)} #${esc(ev.id)}</code></td>
+              <td>${esc(ev.name)}</td>
+              <td><code>${esc(ev.detail)}</code></td>
+            </tr>
+          `;
+        }).join("");
+
+        const html = `
+          <div class="panel-grid">
+            <section class="panel">
+              <h3>Active Rules and Viewer Controls</h3>
+              <div style="font-size:0.84rem;color:var(--text-secondary);margin-bottom:12px;">
+                Semantic comparisons normalize resource collections and strip volatile metadata keys:
+                <code>fingerprint, path, tagManagerUrl, workspaceId</code>.
+              </div>
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <label class="toggle-row"><input id="ins-ignore-noise" type="checkbox" ${PREFS.ignoreNoise ? "checked" : ""}> Ignore Volatile Metadata in Diffs</label>
+                <label class="toggle-row"><input id="ins-changed-only" type="checkbox" ${PREFS.changedOnly ? "checked" : ""}> Timeline: Changed Versions Only</label>
+                <label class="toggle-row"><input id="ins-hide-paused-dom" type="checkbox" ${PREFS.hidePausedDomains ? "checked" : ""}> Hide Paused Tags in Domain Table</label>
+                <div><button type="button" class="btn" id="ins-reset-prefs">Reset Viewer Preferences</button></div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <h3>Snapshot Resource Inventory</h3>
+              <div style="margin-bottom:10px;">
+                <label class="field">Inspect Version
+                  <select id="ins-snap-ver">${snapOpts}</select>
+                </label>
+              </div>
+              <div class="table-wrap"><table class="data-table">
+                <thead><tr><th>Resource Kind</th><th>Count</th><th>Sample Names</th></tr></thead>
+                <tbody>${snapRows}</tbody>
+              </table></div>
+            </section>
+          </div>
+
+          <section class="panel" style="margin-top:16px;">
+            <h3>Entity Lifecycle Tracer</h3>
+            <div class="toolbar" style="margin-top:8px;">
+              <label class="field" style="flex:1;">Resource Name, Tag ID, Measurement ID, or Vendor Keyword
+                <input id="ins-trace-q" type="text" value="${esc(traceQ)}" placeholder="e.g. Enhanced Conversion, Criteo, G-, 128">
+              </label>
+              <button type="button" class="btn btn-accent" id="ins-trace-run">Trace Across ${VERSIONS.length} Versions</button>
+            </div>
+            ${traceEvents.length === 0 ? `<div class="empty-state">No historical changes matched "${esc(traceQ)}".</div>` : `
+              <div class="table-wrap"><table class="data-table">
+                <thead><tr><th>Version</th><th>Timestamp UTC</th><th>Event</th><th>Resource</th><th>Name</th><th>Detail</th></tr></thead>
+                <tbody>${traceRows}</tbody>
+              </table></div>
+            `}
+          </section>
+
+          <section class="panel" style="margin-top:16px;">
+            <h3>Latest Custom HTML External Domains (${filteredDomains.length})</h3>
+            ${filteredDomains.length === 0 ? `<div class="empty-state">No external Custom HTML domains in latest version match the current filter.</div>` : `
+              <div class="table-wrap"><table class="data-table">
+                <thead><tr><th>Tag ID</th><th>Tag Name</th><th>State</th><th>Extracted Domains</th><th>Classification</th></tr></thead>
+                <tbody>${domainRows}</tbody>
+              </table></div>
+            `}
+          </section>
+        `;
+
+        document.getElementById("app-root").innerHTML = html;
+
+        document.getElementById("ins-ignore-noise").addEventListener("change", e => {
+          PREFS.ignoreNoise = e.target.checked; savePrefs(); renderRoute();
+        });
+        document.getElementById("ins-changed-only").addEventListener("change", e => {
+          PREFS.changedOnly = e.target.checked; savePrefs(); renderRoute();
+        });
+        document.getElementById("ins-hide-paused-dom").addEventListener("change", e => {
+          PREFS.hidePausedDomains = e.target.checked; savePrefs(); renderRoute();
+        });
+        document.getElementById("ins-reset-prefs").addEventListener("click", () => {
+          PREFS = { ...DEFAULT_PREFS }; savePrefs(); renderRoute();
+        });
+        document.getElementById("ins-snap-ver").addEventListener("change", e => {
+          PREFS.snapshotInspectVersion = e.target.value;
+          savePrefs();
+          const p = new URLSearchParams(params);
+          p.set("snapshot", e.target.value);
+          navigate("/inspector?" + p.toString());
+        });
+        const runTrace = () => {
+          const val = document.getElementById("ins-trace-q").value.trim();
+          const p = new URLSearchParams(params);
+          if (val) p.set("trace", val); else p.delete("trace");
+          navigate("/inspector" + (p.toString() ? "?" + p.toString() : ""));
+        };
+        document.getElementById("ins-trace-run").addEventListener("click", runTrace);
+        document.getElementById("ins-trace-q").addEventListener("keydown", e => {
+          if (e.key === "Enter") runTrace();
+        });
+      }
+
+      function renderRoute() {
+        const { tab, params } = currentRoute();
+        document.querySelectorAll("#main-nav a").forEach(a => {
+          const route = a.getAttribute("data-route");
+          a.classList.toggle("active", route === tab);
+          a.setAttribute("href", routeHref("/" + route));
+        });
+
+        if (tab === "compare") renderCompare(params);
+        else if (tab === "search") renderSearch(params);
+        else if (tab === "inspector") renderInspector(params);
+        else renderTimeline(params);
+
+        if (PENDING_FOCUS && PENDING_FOCUS.id) {
+          const target = document.getElementById(PENDING_FOCUS.id);
+          if (target) {
+            target.focus();
+            if (typeof target.setSelectionRange === "function" && PENDING_FOCUS.start != null) {
+              try { target.setSelectionRange(PENDING_FOCUS.start, PENDING_FOCUS.end); } catch (e) {}
+            }
+          }
+          PENDING_FOCUS = null;
+        }
+      }
+
+      // Intercept left-click SPA navigation while keeping Cmd+Click / middle-click / copy-link native
+      document.addEventListener("click", e => {
+        const a = e.target.closest("a");
+        if (!a) return;
+        const href = a.getAttribute("href");
+        if (!href) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        if (href.startsWith("/") || href.startsWith("#/")) {
+          e.preventDefault();
+          navigate(href.replace(/^#/, ""));
+        }
+      });
+
+      window.addEventListener("popstate", renderRoute);
+      window.addEventListener("hashchange", renderRoute);
+
+      renderHeaderAndKpis();
+      renderRoute();
+    })();
+  </script>
+</body>
+</html>

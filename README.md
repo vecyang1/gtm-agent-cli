@@ -47,7 +47,12 @@ python3 skills/gtm-agent/scripts/check_account_admins.py --account-id 123
 gtm-agent --version
 gtm-agent inventory --account-id 123 --container-id 456 --workspace-id 7 --json
 gtm-agent snapshot --account-id 123 --container-id 456 --workspace-id 7 --out snapshots/before.json
-gtm-agent diff snapshots/before.json snapshots/after.json --json
+gtm-agent diff snapshots/before.json snapshots/after.json --json   # supports Workspace Snapshots & ContainerVersion / UI v2 JSON exports
+gtm-agent history archive --account-id 123 --container-id 456 --out /path/to/private-archive --unpack --ui
+gtm-agent history build --dir /path/to/private-archive
+gtm-agent history diff --before gtm_v56.json --after gtm_v57.json
+gtm-agent history git-replay --dir /path/to/private-archive --git-repo ~/.local/share/gtm-agent/private-git-history/container-456
+gtm-agent history serve --dir /path/to/private-archive --port 9475
 gtm-agent plan template --out plan.yaml --json
 gtm-agent plan validate plan.yaml --json
 gtm-agent apply plan.yaml --json
@@ -156,8 +161,7 @@ The script creates or refreshes symlinks in:
 
 ```bash
 go mod verify
-python3 skills/gtm-agent/tests/test_contract.py
-python3 skills/gtm-agent/tests/test_account_admin_check.py
+python3 -m unittest discover -s skills/gtm-agent/tests -p "test_*.py"
 go test ./...
 go vet ./...
 go build -o ./gtm-agent ./cmd/gtm-agent

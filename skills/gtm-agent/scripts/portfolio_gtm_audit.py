@@ -431,11 +431,13 @@ def run_gtm_cli(
     return last_error or {}
 
 
-def probe_public_snippet(url: str, public_id: str) -> bool:
-    """Verifies that the target website HTML contains the public GTM container snippet."""
+def fetch_public_html(url: str) -> str:
+    """Fetches public HTML body from target storefront URL."""
     try:
+        sep = "&" if "?" in url else "?"
+        bust_url = f"{url}{sep}_gtm_probe=1"
         req = urllib.request.Request(
-            url,
+            bust_url,
             headers={
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
@@ -443,11 +445,16 @@ def probe_public_snippet(url: str, public_id: str) -> bool:
                 "Sec-Fetch-Dest": "document",
             },
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            body = resp.read().decode("utf-8", errors="ignore")
-            return public_id in body
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            return resp.read().decode("utf-8", errors="ignore")
     except Exception:
-        return False
+        return ""
+
+
+def probe_public_snippet(url: str, public_id: str) -> bool:
+    """Verifies that the target website HTML contains the public GTM container snippet."""
+    body = fetch_public_html(url)
+    return bool(body and public_id in body)
 
 
 def audit_container(config: Dict[str, Any], check_snippets: bool = True) -> ContainerAuditResult:
@@ -565,18 +572,47 @@ def audit_container(config: Dict[str, Any], check_snippets: bool = True) -> Cont
     if blocking_triggers:
         result.blocking_triggers_present = True
 
-    # 3. Compliance & Scoring Checks
-    if not result.ga4_configured:
-        result.issues.append("CRITICAL: No Google Tag / GA4 configuration tag found.")
-        result.score -= 40
+    # 3. Compliance & Scoring Checks (supports ga4_owner == "cms_plugin" anti-double-counting guard)
+    ga4_owner = config.get("ga4_owner", "gtm")
+    expected_ga4 = config.get("expected_ga4_id", "")
+    public_html_cache = fetch_public_html(url) if (check_snippets and url and ga4_owner == "cms_plugin") else ""
+
+    if ga4_owner == "cms_plugin":
+        if result.ga4_configured or result.ecommerce_forwarding_present:
+            result.issues.append(
+                "CRITICAL: Duplicate GA4 tracking risk! ga4_owner is 'cms_plugin' (Site Kit / PMW), "
+                "but GTM also contains an active GA4 tag."
+            )
+            result.score -= 40
+        if check_snippets and url:
+            if expected_ga4 and expected_ga4 in public_html_cache:
+                result.ga4_configured = True
+            else:
+                result.issues.append(f"CRITICAL: CMS plugin failed to output expected GA4 ID {expected_ga4} on {url}.")
+                result.score -= 40
+            if not config.get("requires_ecommerce") or any(
+                marker in public_html_cache for marker in ("pmwDataLayer", "wgact", "wpmDataLayer", expected_ga4)
+            ):
+                result.ecommerce_forwarding_present = True
+            else:
+                result.issues.append(f"CRITICAL: CMS e-commerce tracking plugin output not detected on {url}.")
+                result.score -= 25
+        else:
+            result.ga4_configured = True
+            if config.get("requires_ecommerce"):
+                result.ecommerce_forwarding_present = True
+    else:
+        if not result.ga4_configured:
+            result.issues.append("CRITICAL: No Google Tag / GA4 configuration tag found.")
+            result.score -= 40
+
+        if config.get("requires_ecommerce") and not result.ecommerce_forwarding_present:
+            result.issues.append("CRITICAL: Transactional brand missing e-commerce conversion forwarding tag.")
+            result.score -= 25
 
     if config.get("requires_conversion_linker") and not result.conversion_linker_present:
         result.issues.append("WARN: Conversion Linker (gclidw) missing for paid advertising attribution.")
         result.score -= 15
-
-    if config.get("requires_ecommerce") and not result.ecommerce_forwarding_present:
-        result.issues.append("CRITICAL: Transactional brand missing e-commerce conversion forwarding tag.")
-        result.score -= 25
 
     if config.get("requires_lead_gen") and not result.lead_conversion_present:
         result.issues.append("WARN: Lead generation conversion tag (generate_lead) missing.")

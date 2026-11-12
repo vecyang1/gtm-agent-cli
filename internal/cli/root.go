@@ -63,6 +63,7 @@ func NewRoot(options Options) *cobra.Command {
 	cmd.AddCommand(rt.planCmd())
 	cmd.AddCommand(rt.applyCmd())
 	cmd.AddCommand(rt.backupCmd())
+	cmd.AddCommand(rt.historyCmd())
 	cmd.AddCommand(rt.rawCmd())
 	cmd.AddCommand(rt.guideCmd())
 	return cmd
@@ -234,7 +235,7 @@ func (rt *runtime) diffCmd() *cobra.Command {
 	var allowDifferentScope bool
 	cmd := &cobra.Command{
 		Use:   "diff <before.json> <after.json>",
-		Short: "Compare two GTM snapshots",
+		Short: "Compare two GTM snapshots or container versions",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			before, err := readSnapshot(args[0])
@@ -373,6 +374,67 @@ func (rt *runtime) guideCmd() *cobra.Command {
 			return err
 		},
 	}
+}
+
+func (rt *runtime) historyCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:                "history [subcommand] [flags...]",
+		Short:              "Archive, unpack, diff, and visualize GTM container version history",
+		DisableFlagParsing: true,
+		Args:               cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			scriptPath, err := locateHistoryScript()
+			if err != nil {
+				return err
+			}
+			pyArgs := append([]string{scriptPath}, args...)
+			if _, isFake := rt.options.Runner.(*runner.Fake); isFake {
+				result, err := rt.options.Runner.Run(cmd.Context(), "python3", pyArgs...)
+				if err != nil {
+					return err
+				}
+				_, writeErr := fmt.Fprint(cmd.OutOrStdout(), result.Stdout)
+				return writeErr
+			}
+			proc := exec.CommandContext(cmd.Context(), "python3", pyArgs...)
+			proc.Stdin = cmd.InOrStdin()
+			proc.Stdout = cmd.OutOrStdout()
+			proc.Stderr = cmd.ErrOrStderr()
+			return proc.Run()
+		},
+	}
+}
+
+func locateHistoryScript() (string, error) {
+	if envPath := strings.TrimSpace(os.Getenv("GTM_HISTORY_SCRIPT")); envPath != "" {
+		if info, err := os.Stat(envPath); err == nil && !info.IsDir() {
+			return envPath, nil
+		}
+		return "", fmt.Errorf("GTM_HISTORY_SCRIPT points to missing file %q", envPath)
+	}
+	candidates := []string{
+		filepath.Join("skills", "gtm-agent", "scripts", "gtm_history.py"),
+	}
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "skills", "gtm-agent", "scripts", "gtm_history.py"),
+			filepath.Join(exeDir, "..", "skills", "gtm-agent", "scripts", "gtm_history.py"),
+		)
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		candidates = append(candidates,
+			filepath.Join(home, ".agents", "skills", "gtm-agent", "scripts", "gtm_history.py"),
+			filepath.Join(home, ".gemini", "antigravity", "skills", "gtm-agent", "scripts", "gtm_history.py"),
+			filepath.Join(home, "Documents", "A-coding", "26.05.24-gtm-agent-cli", "skills", "gtm-agent", "scripts", "gtm_history.py"),
+		)
+	}
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("could not locate gtm_history.py; ensure gtm-agent skill scripts are installed or set GTM_HISTORY_SCRIPT")
 }
 
 func (rt *runtime) collectInventory(ctx context.Context, accountID, containerID, workspaceID string) (snapshot.Snapshot, error) {
@@ -584,11 +646,7 @@ func readSnapshot(path string) (snapshot.Snapshot, error) {
 	if err != nil {
 		return snapshot.Snapshot{}, err
 	}
-	var snap snapshot.Snapshot
-	if err := json.Unmarshal(data, &snap); err != nil {
-		return snapshot.Snapshot{}, err
-	}
-	return snap, nil
+	return snapshot.Parse(data)
 }
 
 func validateComparableSnapshots(before, after snapshot.Snapshot) error {

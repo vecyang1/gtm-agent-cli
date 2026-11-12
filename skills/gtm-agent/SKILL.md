@@ -16,7 +16,7 @@ description: >
 - **Source:** https://github.com/vecyang1/gtm-agent-cli
 - **Author:** Vec; Maintainer: Vec + Codex
 - **Created:** 2026-07-21
-- **Updated:** 2026-10-29
+- **Updated:** 2026-11-12
 - **Review status:** `reviewed`
 
 Use this skill for Google Tag Manager operations.
@@ -425,6 +425,7 @@ When conversion events, marketing pixels, or attribution linkers are missing or 
   4. **Uninitialized Protection & Error Discrimination**: Refuses mutation of uninitialized containers without explicit `--allow-legacy-init`, while properly rejecting live version API fetch errors.
   5. **Strict Execution & Publish Gating**: Aborts immediately before version creation if any tag, trigger, or variable mutation fails; verifies publish response and logs rollback commands on error; skips execution cleanly if no actions are needed.
   6. **Post-Publish Verification**: Immediately re-audits the container and asserts score improvement before writing the execution receipt.
+  7. **CMS Plugin Single-Source GA4 Guard (`"ga4_owner": "cms_plugin"`)**: When a WordPress/WooCommerce storefront deliberately delegates GA4 base + enhanced ecommerce tracking to a native CMS plugin (e.g. Pixel Manager for WooCommerce `PMW` alongside `Google Site Kit` with `useSnippet: false`) while keeping an active GTM container for non-GA4 tags, set `"ga4_owner": "cms_plugin"` in `config/containers.local.json`. `portfolio_gtm_audit.py` and `gtm_autobuild.py` then verify that the live frontend HTML emits the expected `G-...` Measurement ID, suppress `gtm_autobuild.py` from auto-injecting a duplicate `GA4 - Google Tag` into GTM, and flag an error if a duplicate `googtag` appears inside GTM.
 
 ### GA4 Event Tag Schema & Mutation Resilience Invariants (Ref: `skill-creator` § Choosing the Rung)
 
@@ -455,6 +456,12 @@ When conversion events, marketing pixels, or attribution linkers are missing or 
   - Flags active tags referencing blacklisted domains with an immediate exit code failure (`🚨 CRITICAL SECURITY ALERT`) and renders real-time tag execution states (`▶️ ACTIVE` vs `⏸️ PAUSED`) in weekly compliance ledgers.
   - *Choosing the Rung*: Why hardened into `portfolio_gtm_audit.py` (Rung 3) and `test_supply_chain_audit.py` (Rung 4): Third-party vendor domain abandonment or hijacking silently takes over client browsers without console errors (**silent failure**), threatens every web property embedding the vendor script (**repeated cost**), and domain matching against known blacklists is completely deterministic (**decidable predicate**).
 
+## Container Version History Archival & Diff (`gtm-agent history`)
+
+- **`diff` Input Formats**: `gtm-agent diff` accepts workspace `Snapshot`, raw GTM API `ContainerVersion` (`versions get`/`live`/`backup`), and GTM UI `exportFormatVersion: 2` exports while stripping volatile metadata (`fingerprint`, `path`, `tagManagerUrl`, `workspaceId`).
+- **Read-Only Sovereign Version History**: Use `gtm-agent history archive --account-id <acc> --container-id <cnt> --out <private-dir> --unpack --ui [--git-repo <isolated-git-dir>]` to archive every historical published version read-only (`GET` only, zero notifications), generate `CHANGELOG.md`, `diff_series.json`, normalized `latest/`, an interactive `history_viewer.html` Change Explorer, and optional chronological Git commit replay.
+- **Privacy & Nested-Git Boundaries**: Store client container archives inside private storage outside this public repository, and keep `--git-repo` targets outside any existing Git working tree (`~/.local/share/gtm-agent/private-git-history/...`). Run `gtm-agent history serve --dir <private-dir>` when browser History API routes and live `/api/*` trace queries are needed.
+
 ## Verification
 
 From the repo:
@@ -465,6 +472,7 @@ python3 skills/gtm-agent/tests/test_account_admin_check.py
 python3 skills/gtm-agent/tests/test_autobuild.py
 python3 skills/gtm-agent/tests/test_supply_chain_audit.py
 python3 skills/gtm-agent/tests/test_surface_gating.py
+python3 skills/gtm-agent/tests/test_history.py
 python3 -m unittest discover -s skills/gtm-agent/tests -p "test_*.py"
 go test ./...
 go vet ./...
@@ -473,5 +481,6 @@ go vet ./...
 
 ## References
 
+- [Container Version History Archival, Semantic Diffs, and Change Explorer](references/history_archive_and_diff.md) (`gtm-agent history` CLI, storage layout, safety guards, and UI Change Explorer)
 - [Google Ads API Integration & Tooling Reference](references/google_ads_api_integration.md) (Developer Token requirements and comparison of Composio vs. google-ads-open-cli)
 

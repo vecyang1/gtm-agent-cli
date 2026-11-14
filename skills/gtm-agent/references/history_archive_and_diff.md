@@ -26,7 +26,7 @@ All volatile GTM keys (`fingerprint`, `path`, `tagManagerUrl`, `workspaceId`) ar
 
 - **Read-Only API Calls**: `archive` uses `gtm version-headers list` and `gtm versions get` only. It never calls `versions create`, `versions publish`, or any workspace mutation.
 - **Public Repo Guard (`assert_safe_output_dir`)**: Refuses writing client container archives inside un-ignored paths of the public `gtm-agent-cli` repository unless `--allow-unsafe-out` is explicitly passed.
-- **No Nested `.git` Repositories (`assert_safe_git_repo`)**: Refuses initializing a Git replay repo inside an existing parent repository tree (e.g., `2nd Brain`). Keep `git-replay` repositories in an external private path such as `~/.local/share/gtm-agent/private-git-history/<brand>-<account>-<container>`.
+- **No Nested `.git` Repositories (`assert_safe_git_repo`)**: Refuses initializing a Git replay repo inside an existing parent repository tree (e.g., `knowledge vault`). Keep `git-replay` repositories in an external private path such as `~/.local/share/gtm-agent/private-git-history/<brand>-<account>-<container>`.
 
 ## Storage & Unpacking Layout
 
